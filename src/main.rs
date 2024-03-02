@@ -1,4 +1,6 @@
-mod reader;
+mod pgen;
+
+use pgen::Pgen;
 
 fn main() {
     let test_pgens = vec![
@@ -8,7 +10,7 @@ fn main() {
     ];
     for pgen_path in test_pgens {
         println!("testing file: {}", pgen_path);
-        reader::read_header(pgen_path).unwrap();
+        let pgen = Pgen::from_file_path(pgen_path.to_string()).unwrap();
         println!("\n");
     }
 }
