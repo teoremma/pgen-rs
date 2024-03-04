@@ -4,9 +4,10 @@ use pgen::Pgen;
 
 fn main() {
     let test_pgens = vec![
-        "data/sample1/1000G_chr19_pruned.pgen",
-        "data/sample2/pset1_1000G_chr16.pgen",
+        // "data/sample1/1000G_chr19_pruned.pgen",
+        // "data/sample2/pset1_1000G_chr16.pgen",
         "data/random1/random1.pgen",
+        // "data/random2/random2.pgen",
     ];
     for pgen_path in test_pgens {
         println!("testing file: {}", pgen_path);
