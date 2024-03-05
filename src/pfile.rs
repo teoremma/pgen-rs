@@ -10,18 +10,26 @@ use std::io::{Read, Write, BufRead, BufReader, Seek, SeekFrom};
 // use polars::prelude::DataFrame;
 
 pub struct Pfile {
-    pub pgen_path: String,
-    pub psam_path: String,
-    pub pvar_path: String,
+    pub pfile_prefix: String,
     pub num_variants: u32,
     pub num_samples: u32,
 }
 
 impl Pfile {
-    pub fn from_prefix(prefix: String) -> Pfile {
-        let pgen_path = format!("{}.pgen", prefix);
-        let psam_path = format!("{}.psam", prefix);
-        let pvar_path = format!("{}.pvar", prefix);
+    pub fn pgen_path(&self) -> String {
+        format!("{}.pgen", self.pfile_prefix)
+    }
+
+    pub fn psam_path(&self) -> String {
+        format!("{}.psam", self.pfile_prefix)
+    }
+
+    pub fn pvar_path(&self) -> String {
+        format!("{}.pvar", self.pfile_prefix)
+    }
+
+    pub fn from_prefix(pfile_prefix: String) -> Pfile {
+        let pgen_path = format!("{}.pgen", pfile_prefix);
 
         let pgen = File::open(&pgen_path).unwrap();
         let mut pgen_reader = BufReader::new(pgen);
@@ -54,9 +62,7 @@ impl Pfile {
         assert_eq!(buf, [0x40]);
 
         Pfile {
-            pgen_path,
-            psam_path,
-            pvar_path,
+            pfile_prefix,
             num_variants,
             num_samples,
         }
@@ -67,7 +73,8 @@ impl Pfile {
         let (variant_ids, variant_idxs, variant_lines) = self.filter_pvar(variant_ids);
         let (sample_ids, sample_idxs) = self.filter_psam(sample_ids);
 
-        let mut vcf = File::create("output.vcf").unwrap();
+        let output_vcf_path = format!("{}.pgen-rs.vcf", self.pfile_prefix);
+        let mut vcf = File::create(output_vcf_path).unwrap();
         // write the header
         write!(vcf, "##fileformat=VCFv4.2\n").unwrap();
         write!(vcf, "##source=pgen-rs\n").unwrap();
@@ -82,7 +89,7 @@ impl Pfile {
         write!(vcf, "{}", pvar_column_names).unwrap();
 
         // now the fun part, write the actual data
-        let pgen = File::open(&self.pgen_path).unwrap();
+        let pgen = File::open(&self.pgen_path()).unwrap();
         let mut pgen_reader = BufReader::new(pgen);
         for (i, variant_idx) in variant_idxs.iter().enumerate() {
             let mut variant_line = variant_lines[i].trim().to_string();
@@ -124,7 +131,7 @@ impl Pfile {
     }
 
     fn read_pvar_header(&self) -> (String, String) {
-        let pvar = File::open(&self.pvar_path).unwrap();
+        let pvar = File::open(&self.pvar_path()).unwrap();
         let mut pvar_reader = BufReader::new(pvar);
         // read all lines that start with # and store them in a vector
         let mut header_lines = Vec::new();
@@ -144,7 +151,7 @@ impl Pfile {
     }
 
     pub fn filter_pvar(&self, variant_ids: Vec<String>) -> (Vec<String>, Vec<u32>, Vec<String>) {
-        let pvar = File::open(&self.pvar_path).unwrap();
+        let pvar = File::open(&self.pvar_path()).unwrap();
         let mut pvar_reader = BufReader::new(pvar);
         // skip all lines that start with #
         loop {
@@ -186,7 +193,7 @@ impl Pfile {
     }
 
     pub fn filter_psam(&self, sample_ids: Vec<String>) -> (Vec<String>, Vec<u32>) {
-        let psam = File::open(&self.psam_path).unwrap();
+        let psam = File::open(&self.psam_path()).unwrap();
         let mut psam_reader = BufReader::new(psam);
         // read the first line, which is the header, and split it by tabs
         // if the first column is not #IID, panic
