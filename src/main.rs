@@ -1,8 +1,12 @@
-mod pgen;
+mod cli;
 mod pfile;
+mod pgen;
 
-use pgen::Pgen;
+use clap::CommandFactory;
+use clap::Parser;
+use cli::{Cli, Commands};
 use pfile::Pfile;
+use pgen::Pgen;
 
 fn test_pgen() {
     let test_pgens = vec![
@@ -23,10 +27,12 @@ fn test_pfile() {
     let pfile_prefix = "data/basic1/basic1";
     let pfile = Pfile::from_prefix(pfile_prefix.to_string());
     let mut pvar_reader = pfile.pvar_reader().unwrap();
+    println!("{:?}", pvar_reader.headers());
     println!("{:?}", pvar_reader.records().next());
     let mut psam_reader = pfile.psam_reader().unwrap();
+    println!("{:?}", psam_reader.headers());
     println!("{:?}", psam_reader.records().next());
-    pfile.filter_test();
+    // pfile.filter_test();
     let variant_ids = vec![
         "rs8100066".to_string(),
         "rs2312724".to_string(),
@@ -41,51 +47,67 @@ fn test_pfile() {
         "HG00100".to_string(),
         "HG00101".to_string(),
     ];
-    pfile.output_vcf(sample_ids, variant_ids);
+    pfile.output_vcf(Some("IID == \"HG00096\" || IID == \"HG00097\"".to_string()), Some("ID == \"rs2312724\" || ID == \"rs7815\"".to_string()));
 }
 
-fn test_pfile2() {
-    let pfile_prefix = "data/basic2/basic2";
-    let pfile = Pfile::from_prefix(pfile_prefix.to_string());
-    // let variant_ids = vec![
-    //     "snp2".to_string(),
-    //     "snp4".to_string(),
-    //     "snp8".to_string(),
-    // ];
-    // let sample_ids = vec![
-    //     "per2".to_string(),
-    //     "per4".to_string(),
-    //     "per8".to_string(),
-    // ];
-
-    let variant_ids = vec![
-        "snp0".to_string(),
-        "snp1".to_string(),
-        "snp2".to_string(),
-        "snp3".to_string(),
-        "snp4".to_string(),
-        "snp5".to_string(),
-        "snp6".to_string(),
-        "snp7".to_string(),
-        "snp8".to_string(),
-        "snp9".to_string(),
-    ];
-    let sample_ids = vec![
-        "per0".to_string(),
-        "per1".to_string(),
-        "per2".to_string(),
-        "per3".to_string(),
-        "per4".to_string(),
-        "per5".to_string(),
-        "per6".to_string(),
-        "per7".to_string(),
-        "per8".to_string(),
-        "per9".to_string(),
-    ];
-    pfile.output_vcf(sample_ids, variant_ids);
-}
+// fn test_pfile2() {
+//     let pfile_prefix = "data/basic2/basic2";
+//     let pfile = Pfile::from_prefix(pfile_prefix.to_string());
+//     // let variant_ids = vec![
+//     //     "snp2".to_string(),
+//     //     "snp4".to_string(),
+//     //     "snp8".to_string(),
+//     // ];
+//     // let sample_ids = vec![
+//     //     "per2".to_string(),
+//     //     "per4".to_string(),
+//     //     "per8".to_string(),
+//     // ];
+//
+//     let variant_ids = vec![
+//         "snp0".to_string(),
+//         "snp1".to_string(),
+//         "snp2".to_string(),
+//         "snp3".to_string(),
+//         "snp4".to_string(),
+//         "snp5".to_string(),
+//         "snp6".to_string(),
+//         "snp7".to_string(),
+//         "snp8".to_string(),
+//         "snp9".to_string(),
+//     ];
+//     let sample_ids = vec![
+//         "per0".to_string(),
+//         "per1".to_string(),
+//         "per2".to_string(),
+//         "per3".to_string(),
+//         "per4".to_string(),
+//         "per5".to_string(),
+//         "per6".to_string(),
+//         "per7".to_string(),
+//         "per8".to_string(),
+//         "per9".to_string(),
+//     ];
+//     pfile.output_vcf(sample_ids, variant_ids);
+// }
 
 fn main() {
-    test_pfile();
+    let cli = Cli::parse();
+    match cli.command {
+        Commands::Query {
+            pfile_prefix,
+            var_query,
+            sam_query,
+            query_fstring,
+        } => {
+            let pfile = Pfile::from_prefix(pfile_prefix);
+            if let Some(query_fstring) = query_fstring {
+                todo!("support query string")
+            } else {
+                pfile.output_vcf(sam_query, var_query).unwrap();
+            }
+
+        }
+    }
     // test_pfile2();
 }

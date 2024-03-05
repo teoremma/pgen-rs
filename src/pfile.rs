@@ -1,8 +1,8 @@
+use csv::{Reader, ReaderBuilder, StringRecord};
+use evalexpr::{eval_boolean_with_context, ContextWithMutableVariables, HashMapContext, Value};
 use std::fs::File;
 use std::io;
-use std::io::{Read, Write, BufRead, BufReader, Seek, SeekFrom};
-use csv::{ReaderBuilder, StringRecord, Reader};
-use evalexpr::{eval_boolean_with_context, HashMapContext, ContextWithMutableVariables, Value};
+use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
 
 // use polars_core::prelude::*;
 // use polars_io::prelude::*;
@@ -47,7 +47,7 @@ impl Pfile {
         let storage_mode = buf[0];
         // for now we only deal with the simplest fixed-width storage mode
         assert!(storage_mode == 0x02);
-        
+
         let mut buf = [0u8; 4];
         pgen_reader.read_exact(&mut buf).unwrap();
         let num_variants = u32::from_le_bytes(buf);
@@ -57,7 +57,7 @@ impl Pfile {
         pgen_reader.read_exact(&mut buf).unwrap();
         let num_samples = u32::from_le_bytes(buf);
         println!("sample_count: {}", num_samples);
-        
+
         let mut buf = [0u8; 1];
         pgen_reader.read_exact(&mut buf).unwrap();
         // print this bit in binary
@@ -71,10 +71,27 @@ impl Pfile {
         }
     }
 
-    pub fn output_vcf(&self, sample_ids: Vec<String>, variant_ids: Vec<String>) {
+    pub fn output_vcf(&self, sam_query: Option<String>, var_query: Option<String>) -> csv::Result<()> {
         let (pvar_header, pvar_column_names) = self.read_pvar_header();
-        let (variant_ids, variant_idxs, variant_lines) = self.filter_pvar(variant_ids);
-        let (sample_ids, sample_idxs) = self.filter_psam(sample_ids);
+        let mut psam_reader = self.psam_reader()?;
+        let sam_header = psam_reader.headers()?;
+        // Index of the sample id in each sample record.
+        let sam_rcd_id_idx = sam_header.iter().enumerate().find_map(|(idx, col)| {
+            // TODO: make this a constant
+            if col == "IID" {
+                Some(idx)
+            } else {
+                None
+            }
+        }).expect(&format!("IID not among the headers of {}", self.psam_path()));
+        let var_idx_rcds = self.filter_metadata(&mut self.pvar_reader()?, var_query)?;
+        let sam_idx_rcs = self.filter_metadata(&mut psam_reader, sam_query)?;
+        println!("filtered metadata");
+        let sam_ids = sam_idx_rcs
+            .iter()
+            .map(|(_idx, rcd)| rcd.get(sam_rcd_id_idx).unwrap().to_string())
+            .collect::<Vec<String>>()
+            .join("\t");
 
         let output_vcf_path = format!("{}.pgen-rs.vcf", self.pfile_prefix);
         let mut vcf = File::create(output_vcf_path).unwrap();
@@ -82,34 +99,34 @@ impl Pfile {
         write!(vcf, "##fileformat=VCFv4.2\n").unwrap();
         write!(vcf, "##source=pgen-rs\n").unwrap();
         write!(vcf, "{}", pvar_header).unwrap();
-    
+
         let mut pvar_column_names = pvar_column_names.trim().to_string();
         // pvar_column_names.push_str("\tQUAL\tFILTER\tINFO\tFORMAT\t");
         pvar_column_names.push_str("\tFORMAT\t");
-        // join the sample ids with tabs and add a newline
-        pvar_column_names.push_str(&sample_ids.join("\t"));
+        // The sample ids joined with tabs
+        pvar_column_names.push_str(&sam_ids);
         pvar_column_names.push_str("\n");
         write!(vcf, "{}", pvar_column_names).unwrap();
 
         // now the fun part, write the actual data
         let pgen = File::open(&self.pgen_path()).unwrap();
         let mut pgen_reader = BufReader::new(pgen);
-        for (i, variant_idx) in variant_idxs.iter().enumerate() {
-            let mut variant_line = variant_lines[i].trim().to_string();
+        for (var_idx, var_rcd) in var_idx_rcds.iter() {
+            let mut variant_line = var_rcd.iter().map(|s| s.to_string()).collect::<Vec<String>>().join("\t");
             variant_line.push_str("\tGT");
             // variant_line.push_str("\t.\t.\t.\tGT");
 
-            let record_offset = 12 + (variant_idx * self.variant_record_size()) as u64;
-            for (j, sample_idx) in sample_idxs.iter().enumerate() {
+            let record_offset = 12 + (*var_idx as u32 * self.variant_record_size()) as u64;
+            for (sam_idx, _sam_rcd) in sam_idx_rcs.iter() {
                 // first we obtain the byte in which the sample is located
-                let sample_offset = sample_idx / 4;
+                let sample_offset = sam_idx / 4;
                 let byte_offest = record_offset + sample_offset as u64;
                 // then we read the byte
                 pgen_reader.seek(SeekFrom::Start(byte_offest)).unwrap();
                 let mut buf = [0u8; 1];
                 pgen_reader.read_exact(&mut buf).unwrap();
                 // then we obtain the 2 bits that represent the sample
-                let in_byte_offset = sample_idx % 4;
+                let in_byte_offset = sam_idx % 4;
                 // let encoded_genotype = (buf[0] >> ((3 - in_byte_offset) * 2)) & 0b11;
                 let encoded_genotype = (buf[0] >> (in_byte_offset * 2)) & 0b11;
                 let genotype = match encoded_genotype {
@@ -124,7 +141,8 @@ impl Pfile {
             }
             variant_line.push_str("\n");
             write!(vcf, "{}", variant_line).unwrap();
-        }        
+        }
+        Ok(())
     }
 
     fn variant_record_size(&self) -> u32 {
@@ -227,7 +245,9 @@ impl Pfile {
         for record in reader.records() {
             let mut context = HashMapContext::new();
             for (var, val) in std::iter::zip(&headers, &record?) {
-                context.set_value(var.to_string(), Value::String(val.to_string())).unwrap();
+                context
+                    .set_value(var.to_string(), Value::String(val.to_string()))
+                    .unwrap();
             }
             if eval_boolean_with_context("ID == \"rs8100066\"", &context).unwrap() {
                 count += 1;
@@ -241,81 +261,25 @@ impl Pfile {
         Pfile::metadata_file_reader(self.psam_path(), self.num_samples as usize)
     }
 
-    // TODO: refactor to use pvar_reader()
-    pub fn filter_pvar(&self, variant_ids: Vec<String>) -> (Vec<String>, Vec<u32>, Vec<String>) {
-        let pvar = File::open(&self.pvar_path()).unwrap();
-        let mut pvar_reader = BufReader::new(pvar);
-        // skip all lines that start with #
-        loop {
-            
-            let mut buf = String::new();
-            pvar_reader.read_line(&mut buf).unwrap();
-            if !buf.starts_with("#") {
-                // seek back to the start of the line
-                pvar_reader.seek(SeekFrom::Current(-(buf.len() as i64))).unwrap();
-                break;
+    fn filter_metadata(&self, meta_reader: &mut Reader<File>, query: Option<String>) -> csv::Result<Vec<(usize, StringRecord)>> {
+        let headers: StringRecord = meta_reader.headers()?.clone();
+        let mut kept_idx_vars = Vec::new();
+        for (idx, rcd) in meta_reader.records().enumerate() {
+            let rcd = rcd?;
+            let query_res = query.as_ref().map_or(true, |query| {
+                let mut context = HashMapContext::new();
+                for (var, val) in std::iter::zip(&headers, &rcd) {
+                    context
+                        .set_value(var.to_string(), Value::String(val.to_string()))
+                        .unwrap();
+                }
+                eval_boolean_with_context(query, &context).unwrap()
+            });
+            if query_res {
+                kept_idx_vars.push((idx, rcd));
             }
         }
-        // read the rest of the file line by line, keeping the row idxs of the variants we want
-        // as well as the whole line, so we can write it to a new file
-        let mut cur_idx = 0;
-        let mut sorted_variant_ids = Vec::new();
-        let mut variant_idxs = Vec::new();
-        let mut variant_lines = Vec::new();
-        loop {
-            let mut line = String::new();
-            let bytes_read = pvar_reader.read_line(&mut line).unwrap();
-            if bytes_read == 0 {
-                break;
-            }
-            let variant_row: Vec<_> = line.split("\t").collect();
-            let variant_id = variant_row[2].to_string();
-            // the third item is the variant id
-            if variant_ids.contains(&variant_id) {
-                sorted_variant_ids.push(variant_id);
-                variant_idxs.push(cur_idx);
-                variant_lines.push(line);
-            }
-            cur_idx += 1;
-        }
-        assert_eq!(variant_idxs.len(), variant_ids.len());
-        assert_eq!(cur_idx, self.num_variants);
-
-        (sorted_variant_ids, variant_idxs, variant_lines)
+        Ok(kept_idx_vars)
     }
 
-    // TODO: refactor to use psam_reader()
-    pub fn filter_psam(&self, sample_ids: Vec<String>) -> (Vec<String>, Vec<u32>) {
-        let psam = File::open(&self.psam_path()).unwrap();
-        let mut psam_reader = BufReader::new(psam);
-        // read the first line, which is the header, and split it by tabs
-        // if the first column is not #IID, panic
-        let mut header = String::new();
-        psam_reader.read_line(&mut header).unwrap();
-        let header: Vec<_> = header.split("\t").collect();
-        assert_eq!(header[0], "#IID");
-
-        // read the rest of the file line by line, keeping the row idxs of the samples we want
-        let mut cur_idx = 0;
-        let mut sorted_sample_ids = Vec::new();
-        let mut sample_idxs = Vec::new();
-        loop {
-            let mut line = String::new();
-            let bytes_read = psam_reader.read_line(&mut line).unwrap();
-            if bytes_read == 0 {
-                break;
-            }
-            let sample_row: Vec<_> = line.split("\t").collect();
-            let sample_id = sample_row[0].to_string();
-            // the first item is the sample id
-            if sample_ids.contains(&sample_id) {
-                sorted_sample_ids.push(sample_id);
-                sample_idxs.push(cur_idx);
-            }
-            cur_idx += 1;
-        }
-        assert_eq!(cur_idx, self.num_samples);
-
-        (sorted_sample_ids, sample_idxs)
-    }
 }
