@@ -22,6 +22,11 @@ fn test_pgen() {
 fn test_pfile() {
     let pfile_prefix = "data/basic1/basic1";
     let pfile = Pfile::from_prefix(pfile_prefix.to_string());
+    let mut pvar_reader = pfile.pvar_reader().unwrap();
+    println!("{:?}", pvar_reader.records().next());
+    let mut psam_reader = pfile.psam_reader().unwrap();
+    println!("{:?}", psam_reader.records().next());
+    pfile.filter_test();
     let variant_ids = vec![
         "rs8100066".to_string(),
         "rs2312724".to_string(),
