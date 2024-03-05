@@ -1,0 +1,24 @@
+PLINK v2.00a5.10LM AVX2 Intel (5 Jan 2024)
+Options in effect:
+  --export vcf
+  --out basic2
+  --pfile basic2
+
+Hostname: emmanuel
+Working directory: /home/ubuntu/repos/pgen-rs/data/basic2
+Start time: Tue Mar  5 04:57:51 2024
+
+Random number seed: 1709614671
+385577 MiB RAM detected, ~120531 available; reserving 120467 MiB for main
+workspace.
+Using up to 10 threads (change this with --threads).
+300 samples (300 females, 0 males; 300 founders) loaded from basic2.psam.
+200000 variants loaded from basic2.pvar.
+1 binary phenotype loaded (148 cases, 152 controls).
+--export vcf to basic2.vcf ... done.
+Warning: At least one VCF allele code violates the official specification;
+other tools may not accept the file.  (Valid codes must either start with a
+'<', only contain characters in {A,C,G,T,N,a,c,g,t,n}, be an isolated '*', or
+represent a breakend.)
+
+End time: Tue Mar  5 04:57:51 2024

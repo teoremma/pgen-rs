@@ -33,7 +33,9 @@ impl Pgen {
         buf_reader.read_exact(buf.as_mut())?;
         let storage_mode = buf[0];
         // for now we only deal with the standard storage mode
-        assert_eq!(storage_mode, 0x10);
+        // assert_eq!(storage_mode, 0x10);
+        // print the storage mode in hex
+        println!("storage mode: 0x{:x}", storage_mode);
 
         let mut buf = [0u8; 4];
         buf_reader.read_exact(buf.as_mut())?;

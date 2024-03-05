@@ -1,0 +1,23 @@
+PLINK v2.00a5.10LM AVX2 Intel (5 Jan 2024)
+Options in effect:
+  --make-pgen format=2
+  --out basic1
+  --pfile ../sample1/1000G_chr19_pruned
+
+Hostname: emmanuel
+Working directory: /home/ubuntu/repos/pgen-rs/data/basic1
+Start time: Tue Mar  5 02:40:57 2024
+
+Random number seed: 1709606457
+385577 MiB RAM detected, ~120718 available; reserving 120654 MiB for main
+workspace.
+Using up to 10 threads (change this with --threads).
+2504 samples (0 females, 0 males, 2504 ambiguous; 2504 founders) loaded from
+../sample1/1000G_chr19_pruned.psam.
+17784 variants loaded from ../sample1/1000G_chr19_pruned.pvar.
+Note: No phenotype data present.
+Writing basic1.psam ... done.
+Writing basic1.pvar ... done.
+Writing basic1.pgen ... done.
+
+End time: Tue Mar  5 02:40:57 2024
