@@ -106,7 +106,6 @@ fn main() {
             } else {
                 pfile.output_vcf(sam_query, var_query).unwrap();
             }
-
         }
     }
     // test_pfile2();

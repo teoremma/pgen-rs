@@ -110,25 +110,26 @@ impl Pfile {
 
         // now the fun part, write the actual data
         let pgen = File::open(&self.pgen_path()).unwrap();
-        let mut pgen_reader = BufReader::new(pgen);
+        // seems that BufReader makes things slower
+        // let mut pgen_reader = BufReader::new(pgen);
+        let mut pgen_reader = pgen;
         for (var_idx, var_rcd) in var_idx_rcds.iter() {
             let mut variant_line = var_rcd.iter().map(|s| s.to_string()).collect::<Vec<String>>().join("\t");
             variant_line.push_str("\tGT");
             // variant_line.push_str("\t.\t.\t.\tGT");
 
             let record_offset = 12 + (*var_idx as u32 * self.variant_record_size()) as u64;
+            // read the whole record to file
+            // this restricts the number of syscalls to |variants| instead of |variants| * |samples|
+            let mut record_buf = vec![0u8; self.variant_record_size() as usize];
+            pgen_reader.seek(SeekFrom::Start(record_offset)).unwrap();
+            pgen_reader.read_exact(&mut record_buf).unwrap();
             for (sam_idx, _sam_rcd) in sam_idx_rcs.iter() {
-                // first we obtain the byte in which the sample is located
                 let sample_offset = sam_idx / 4;
-                let byte_offest = record_offset + sample_offset as u64;
-                // then we read the byte
-                pgen_reader.seek(SeekFrom::Start(byte_offest)).unwrap();
-                let mut buf = [0u8; 1];
-                pgen_reader.read_exact(&mut buf).unwrap();
-                // then we obtain the 2 bits that represent the sample
+                let host_byte = record_buf[sample_offset as usize];
                 let in_byte_offset = sam_idx % 4;
-                // let encoded_genotype = (buf[0] >> ((3 - in_byte_offset) * 2)) & 0b11;
-                let encoded_genotype = (buf[0] >> (in_byte_offset * 2)) & 0b11;
+                let encoded_genotype = (host_byte >> (in_byte_offset * 2)) & 0b11;
+// 
                 let genotype = match encoded_genotype {
                     0b00 => "0/0",
                     0b01 => "0/1",
