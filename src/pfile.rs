@@ -71,7 +71,7 @@ impl Pfile {
         }
     }
 
-    pub fn output_vcf(&self, sam_query: Option<String>, var_query: Option<String>) -> csv::Result<()> {
+    pub fn output_vcf(&self, sam_query: Option<String>, var_query: Option<String>, var_batch_size: usize) -> csv::Result<()> {
         let (pvar_header, pvar_column_names) = self.read_pvar_header();
         let mut psam_reader = self.psam_reader()?;
         let sam_header = psam_reader.headers()?;
@@ -84,12 +84,16 @@ impl Pfile {
                 None
             }
         }).expect(&format!("IID not among the headers of {}", self.psam_path()));
-        let var_idx_rcds = self.filter_metadata(&mut self.pvar_reader()?, var_query)?;
-        let sam_idx_rcs = self.filter_metadata(&mut psam_reader, sam_query)?;
+        let var_idx_rcd_batches = self.filter_metadata(&mut self.pvar_reader()?, var_query, var_batch_size)?;
+        let sam_idx_rcd_batches = self.filter_metadata(&mut psam_reader, sam_query, 1)?;
         println!("filtered metadata");
-        let sam_ids = sam_idx_rcs
+        let sam_ids = sam_idx_rcd_batches
             .iter()
-            .map(|(_idx, rcd)| rcd.get(sam_rcd_id_idx).unwrap().to_string())
+            .flat_map(|batch| {
+                batch.iter().map(|(_idx, rcd)|
+                                 rcd.get(sam_rcd_id_idx).unwrap().to_string()
+                )
+            })
             .collect::<Vec<String>>()
             .join("\t");
 
@@ -111,37 +115,45 @@ impl Pfile {
         // seems that BufReader makes things slower
         // let mut pgen_reader = BufReader::new(pgen);
         let mut pgen_reader = pgen;
-        for (var_idx, var_rcd) in var_idx_rcds.iter() {
-            let pvar_line = var_rcd.iter().map(|s| s.to_string()).collect::<Vec<String>>().join("\t");
-            write!(vcf_writer, "{}\tGT", pvar_line).unwrap();
-            // pvar_line.push_str("\tGT");
-            // write!(vcf_writer, "\tGT").unwrap();
-
-            let record_offset = 12 + (*var_idx as u32 * self.variant_record_size()) as u64;
-            // read the whole record to file
-            // this restricts the number of syscalls to |variants| instead of |variants| * |samples|
-            let mut record_buf = vec![0u8; self.variant_record_size() as usize];
+        for var_idx_rcd_batch in var_idx_rcd_batches.iter() {
+            // Batches must not be empty.
+            let (first_var_idx, _) = var_idx_rcd_batch[0];
+            let record_offset = 12 + (first_var_idx as u32 * self.variant_record_size()) as u64;
+            let mut record_buf = vec![0u8; self.variant_record_size() as usize * var_batch_size];
             pgen_reader.seek(SeekFrom::Start(record_offset)).unwrap();
-            pgen_reader.read_exact(&mut record_buf).unwrap();
-            for (sam_idx, _sam_rcd) in sam_idx_rcs.iter() {
-                let sample_offset = sam_idx / 4;
-                let host_byte = record_buf[sample_offset as usize];
-                let in_byte_offset = sam_idx % 4;
-                let encoded_genotype = (host_byte >> (in_byte_offset * 2)) & 0b11;
-// 
-                let genotype = match encoded_genotype {
-                    0b00 => "0/0",
-                    0b01 => "0/1",
-                    0b10 => "1/1",
-                    0b11 => "./.",
-                    _ => panic!("unexpected genotype"),
-                };
-                // pvar_line.push_str("\t");
-                // pvar_line.push_str(genotype);
-                write!(vcf_writer, "\t{}", genotype).unwrap();
+            // println!("reading record at {}", record_offset);
+            pgen_reader.read(&mut record_buf).unwrap();
+            for (var_idx, var_rcd) in var_idx_rcd_batch.iter() {
+                let pvar_line = var_rcd.iter().map(|s| s.to_string()).collect::<Vec<String>>().join("\t");
+                write!(vcf_writer, "{}\tGT", pvar_line).unwrap();
+                // pvar_line.push_str("\tGT");
+                // write!(vcf_writer, "\tGT").unwrap();
+
+                let var_offset = (var_idx - first_var_idx) * self.variant_record_size() as usize;
+                // println!("reading record starting at {}", record_offset + var_offset as u64);
+                // read the whole record to file
+                // this restricts the number of syscalls to |variants| instead of |variants| * |samples|
+                for (sam_idx, _sam_rcd) in sam_idx_rcd_batches.iter().flatten() {
+                    let sample_offset = sam_idx / 4;
+                    let host_byte = record_buf[var_offset + sample_offset as usize];
+                    let in_byte_offset = sam_idx % 4;
+                    let encoded_genotype = (host_byte >> (in_byte_offset * 2)) & 0b11;
+    //
+                    let genotype = match encoded_genotype {
+                        0b00 => "0/0",
+                        0b01 => "0/1",
+                        0b10 => "1/1",
+                        0b11 => "./.",
+                        _ => panic!("unexpected genotype"),
+                    };
+                    // pvar_line.push_str("\t");
+                    // pvar_line.push_str(genotype);
+                    write!(vcf_writer, "\t{}", genotype).unwrap();
+
+                }
+                write!(vcf_writer, "\n").unwrap();
             }
             // pvar_line.push_str("\n");
-            write!(vcf_writer, "\n").unwrap();
             // write!(vcf_writer, "{}", pvar_line).unwrap();
         }
         Ok(())
@@ -263,9 +275,18 @@ impl Pfile {
         Pfile::metadata_file_reader(self.psam_path(), self.num_samples as usize)
     }
 
-    fn filter_metadata(&self, meta_reader: &mut Reader<File>, query: Option<String>) -> csv::Result<Vec<(usize, StringRecord)>> {
+    fn filter_metadata(&self, meta_reader: &mut Reader<File>, query: Option<String>, batch_size: usize) -> csv::Result<Vec<Vec<(usize, StringRecord)>>> {
         let headers: StringRecord = meta_reader.headers()?.clone();
-        let mut kept_idx_vars = Vec::new();
+        // NOTE: we could set the capacity of these, but we don't know ahead of
+        // time how filled they will get.
+        let mut kept_idx_vars_batches = Vec::new();
+        let mut kept_idx_vars_batch = Vec::new();
+        // This is for batching our reads of rows/cols, so each "batch"
+        // corresponds to batch_size many records contiguous in memory.
+        // Therefore, the maximum size of each of the batches is batch_size. We
+        // however expect that there will generally be fewer than this number
+        // unless every single record is matched.
+        let mut batch_count = 0;
         for (idx, rcd) in meta_reader.records().enumerate() {
             let rcd = rcd?;
             let query_res = query.as_ref().map_or(true, |query| {
@@ -278,10 +299,24 @@ impl Pfile {
                 eval_boolean_with_context(query, &context).unwrap()
             });
             if query_res {
-                kept_idx_vars.push((idx, rcd));
+                kept_idx_vars_batch.push((idx, rcd));
+            }
+            batch_count += 1;
+            // Note how we don't compare the siez of the batches themselves, but
+            // instead check against the batch_count variable, which always
+            // counts up.
+            if batch_count == batch_size {
+                if !kept_idx_vars_batch.is_empty() {
+                    kept_idx_vars_batches.push(kept_idx_vars_batch);
+                }
+                kept_idx_vars_batch = Vec::new();
+                batch_count = 0;
             }
         }
-        Ok(kept_idx_vars)
+        if !kept_idx_vars_batch.is_empty() {
+            kept_idx_vars_batches.push(kept_idx_vars_batch);
+        }
+        Ok(kept_idx_vars_batches)
     }
 
 }

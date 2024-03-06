@@ -19,11 +19,17 @@ pub enum Commands {
         #[arg(long = "var-query")]
         /// Specifies a query on which variants to keep. If not passed, keeps all variants.
         var_query: Option<String>,
+
         #[arg(long = "sam-query")]
         /// Specifies a query on which samples to keep. If not passed, keeps all variants.
         sam_query: Option<String>,
+
         #[arg(long = "query-fstring")]
         /// Specifies what to output to stdout for each variant. If not passed, a VCF is output.
         query_fstring: Option<String>,
+
+        #[arg(long = "var-batch-size", default_value = "1")]
+        /// Batch size for how many variant rows to read at once when generating a VCF.
+        var_batch_size: usize
     },
 }

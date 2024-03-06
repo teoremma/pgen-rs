@@ -47,7 +47,7 @@ fn test_pfile() {
         "HG00100".to_string(),
         "HG00101".to_string(),
     ];
-    pfile.output_vcf(Some("IID == \"HG00096\" || IID == \"HG00097\"".to_string()), Some("ID == \"rs2312724\" || ID == \"rs7815\"".to_string()));
+    pfile.output_vcf(Some("IID == \"HG00096\" || IID == \"HG00097\"".to_string()), Some("ID == \"rs2312724\" || ID == \"rs7815\"".to_string()), 1);
 }
 
 // fn test_pfile2() {
@@ -99,12 +99,13 @@ fn main() {
             var_query,
             sam_query,
             query_fstring,
+            var_batch_size,
         } => {
             let pfile = Pfile::from_prefix(pfile_prefix);
             if let Some(query_fstring) = query_fstring {
                 todo!("support query string")
             } else {
-                pfile.output_vcf(sam_query, var_query).unwrap();
+                pfile.output_vcf(sam_query, var_query, var_batch_size).unwrap();
             }
         }
     }
