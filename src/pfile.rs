@@ -1,5 +1,5 @@
 use csv::{Reader, ReaderBuilder, StringRecord};
-use evalexpr::{eval_boolean_with_context, ContextWithMutableVariables, HashMapContext, Value};
+use evalexpr::{eval_boolean_with_context, ContextWithMutableVariables, HashMapContext, Value, eval_string_with_context};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
@@ -69,6 +69,28 @@ impl Pfile {
             num_variants,
             num_samples,
         }
+    }
+
+    pub fn query_vars(&self, var_query: Option<String>, f_string: String) -> csv::Result<()> {
+        let mut pvar_reader = self.pvar_reader()?;
+        let headers: StringRecord = pvar_reader.headers()?.clone();
+        for (_idx, rcd) in pvar_reader.records().enumerate() {
+            let rcd = rcd?;
+            let mut context = HashMapContext::new();
+            for (var, val) in std::iter::zip(&headers, &rcd) {
+                context
+                    .set_value(var.to_string(), Value::String(val.to_string()))
+                    .unwrap();
+            }
+            let query_res = var_query.as_ref().map_or(true, |query| {
+                eval_boolean_with_context(query, &context).unwrap()
+            });
+            if query_res {
+                let output = eval_string_with_context(&f_string, &context).unwrap();
+                println!("{}", output);
+            }
+        }
+        Ok(())
     }
 
     pub fn output_vcf(&self, sam_query: Option<String>, var_query: Option<String>) -> csv::Result<()> {

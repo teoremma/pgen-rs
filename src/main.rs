@@ -102,7 +102,7 @@ fn main() {
         } => {
             let pfile = Pfile::from_prefix(pfile_prefix);
             if let Some(query_fstring) = query_fstring {
-                todo!("support query string")
+                pfile.query_vars(var_query, query_fstring).unwrap();
             } else {
                 pfile.output_vcf(sam_query, var_query).unwrap();
             }
