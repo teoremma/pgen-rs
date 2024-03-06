@@ -2,7 +2,7 @@ use csv::{Reader, ReaderBuilder, StringRecord};
 use evalexpr::{eval_boolean_with_context, ContextWithMutableVariables, HashMapContext, Value};
 use std::fs::File;
 use std::io;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
 // use polars_core::prelude::*;
 // use polars_io::prelude::*;
@@ -94,19 +94,17 @@ impl Pfile {
             .join("\t");
 
         let output_vcf_path = format!("{}.pgen-rs.vcf", self.pfile_prefix);
-        let mut vcf = File::create(output_vcf_path).unwrap();
+        let vcf = File::create(output_vcf_path).unwrap();
+        let mut vcf_writer = BufWriter::new(vcf);
         // write the header
-        write!(vcf, "##fileformat=VCFv4.2\n").unwrap();
-        write!(vcf, "##source=pgen-rs\n").unwrap();
-        write!(vcf, "{}", pvar_header).unwrap();
+        write!(vcf_writer, "##fileformat=VCFv4.2\n").unwrap();
+        write!(vcf_writer, "##source=pgen-rs\n").unwrap();
+        write!(vcf_writer, "{}", pvar_header).unwrap();
 
-        let mut pvar_column_names = pvar_column_names.trim().to_string();
-        // pvar_column_names.push_str("\tQUAL\tFILTER\tINFO\tFORMAT\t");
-        pvar_column_names.push_str("\tFORMAT\t");
-        // The sample ids joined with tabs
-        pvar_column_names.push_str(&sam_ids);
-        pvar_column_names.push_str("\n");
-        write!(vcf, "{}", pvar_column_names).unwrap();
+        // avoid push_str since it is slow
+        let pvar_column_names = pvar_column_names.trim().to_string();
+        write!(vcf_writer, "{}", pvar_column_names).unwrap();
+        write!(vcf_writer, "\tFORMAT\t{}\n", &sam_ids).unwrap();
 
         // now the fun part, write the actual data
         let pgen = File::open(&self.pgen_path()).unwrap();
@@ -114,9 +112,10 @@ impl Pfile {
         // let mut pgen_reader = BufReader::new(pgen);
         let mut pgen_reader = pgen;
         for (var_idx, var_rcd) in var_idx_rcds.iter() {
-            let mut variant_line = var_rcd.iter().map(|s| s.to_string()).collect::<Vec<String>>().join("\t");
-            variant_line.push_str("\tGT");
-            // variant_line.push_str("\t.\t.\t.\tGT");
+            let pvar_line = var_rcd.iter().map(|s| s.to_string()).collect::<Vec<String>>().join("\t");
+            write!(vcf_writer, "{}\tGT", pvar_line).unwrap();
+            // pvar_line.push_str("\tGT");
+            // write!(vcf_writer, "\tGT").unwrap();
 
             let record_offset = 12 + (*var_idx as u32 * self.variant_record_size()) as u64;
             // read the whole record to file
@@ -137,11 +136,13 @@ impl Pfile {
                     0b11 => "./.",
                     _ => panic!("unexpected genotype"),
                 };
-                variant_line.push_str("\t");
-                variant_line.push_str(genotype);
+                // pvar_line.push_str("\t");
+                // pvar_line.push_str(genotype);
+                write!(vcf_writer, "\t{}", genotype).unwrap();
             }
-            variant_line.push_str("\n");
-            write!(vcf, "{}", variant_line).unwrap();
+            // pvar_line.push_str("\n");
+            write!(vcf_writer, "\n").unwrap();
+            // write!(vcf_writer, "{}", pvar_line).unwrap();
         }
         Ok(())
     }
