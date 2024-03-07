@@ -183,6 +183,47 @@ $ time bcftools filter data/chr22/chr22.vcf.gz -i 'POS!=16647494 || POS!=5124128
 bcftools filter data/chr22/chr22.vcf.gz -i 'POS!=16647494 || POS!=51241285' -  74.69s user 16.25s system 99% cpu 1:31.77 total
 ```
 
+## Next steps
+
+There are a few things we might consider for future work.
+
+### A better expression language
+
+Our expression language is not domain-specific (it is just a simple one which
+someone made that we could use as a library). There are some features we would
+like to support, such as
+
+* Parity with `bcftools` in the query language. `bcftools` supports, for
+  example, indexing into genotypes in their queries (for both filters and format
+  strings). We do not have any genotype information in ours; you can only query
+  metadata. Adding this would require us to redesign the expression language.
+* Additionally, `bcftools` allows indexing into the `INFO` and `FMT` subfields.
+  We could support this without changing the expression language by making
+  variables available corresponding to these subfields.
+* There are some other usability annoyances with the expression language, such
+  as its lack of support for character escaping (e.g. you need to be put a
+  literal tab instead of `\t` in a string to output a tab). And that strings
+  must be concatenated as in `ID + " " + POS` (ours) instead of formatted like
+  in `%ID %POS` (from `bcftools`).
+* Finally, having a domain-specific expression language would let us perform
+  static analysis on the queries to discover which parts of the metadata and
+  genotypes we need to parse - if any.
+
+### Additional features
+
+* Outputting to .pgen in addition to .vcf is a potentially useful feature.
+
+## How you can help
+
+If you are interested in this tool and find it limiting in some way, you should
+[file an issue](https://github.com/teoremma/pgen-rs/issues) describing the
+feature(s) you want it to have.
+
+Some things that would concretely help us are:
+* What queries do you want to make that you cannot with this tool?
+* What types of transformations do you want to make that you cannot with this tool?
+* What is slow that you wish was faster?
+* What is hard/unwieldy that you wish was easier?
 
 ## The pgen format
 
