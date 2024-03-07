@@ -152,7 +152,7 @@ impl Pfile {
         let mut pgen_reader = pgen;
         // For writing the hot part of the loop (the body of the VCF) we will
         // use BufWriter::write for performance reasons.
-        println!("wrote header");
+        // println!("wrote header");
         for (var_idx, var_rcd) in var_idx_rcds.iter() {
             for col in var_rcd.iter() {
                 vcf_writer.write(col.as_bytes())?;
