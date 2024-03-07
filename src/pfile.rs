@@ -133,9 +133,15 @@ impl Pfile {
         // seems that BufReader makes things slower
         // let mut pgen_reader = BufReader::new(pgen);
         let mut pgen_reader = pgen;
+        // For writing the hot part of the loop (the body of the VCF) we will
+        // use BufWriter::write for performance reasons.
+        println!("wrote header");
         for (var_idx, var_rcd) in var_idx_rcds.iter() {
-            let pvar_line = var_rcd.iter().map(|s| s.to_string()).collect::<Vec<String>>().join("\t");
-            write!(vcf_writer, "{}\tGT", pvar_line).unwrap();
+            for col in var_rcd.iter() {
+                vcf_writer.write(col.as_bytes())?;
+                vcf_writer.write(b"\t")?;
+            }
+            vcf_writer.write("GT".as_bytes())?;
             // pvar_line.push_str("\tGT");
             // write!(vcf_writer, "\tGT").unwrap();
 
@@ -160,10 +166,11 @@ impl Pfile {
                 };
                 // pvar_line.push_str("\t");
                 // pvar_line.push_str(genotype);
-                write!(vcf_writer, "\t{}", genotype).unwrap();
+                vcf_writer.write(b"\t")?;
+                vcf_writer.write(genotype.as_bytes())?;
             }
             // pvar_line.push_str("\n");
-            write!(vcf_writer, "\n").unwrap();
+            vcf_writer.write(b"\n")?;
             // write!(vcf_writer, "{}", pvar_line).unwrap();
         }
         Ok(())
