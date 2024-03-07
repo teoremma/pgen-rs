@@ -28,6 +28,9 @@ put them in your path manually.
 
 ## Building from source
 
+For just using `pgen-rs`, we recommend following the installation instructions
+in the **Installation** section above.
+
 If you want to build from source, you'll first need to install [Rust and
 `cargo`](https://rustup.rs/).
 
