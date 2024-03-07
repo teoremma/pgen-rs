@@ -26,6 +26,37 @@ Go to [releases](https://github.com/teoremma/pgen-rs/releases), pick a release,
 and then either paste the provided shell command or download the binaries and
 put them in your path manually.
 
+## Building from source
+
+If you want to build from source, you'll first need to install [Rust and
+`cargo`](https://rustup.rs/).
+
+Then just use
+
+``` shell
+$ cargo build
+```
+
+to build locally
+
+and
+
+``` shell
+$ cargo run -- ARGS
+```
+
+to run locally.
+
+We recommend additionally supplying the `--release` flag (e.g. `cargo run --release -- ARGS`) to build 
+
+To install as `pgen-rs`, use
+
+``` shell
+$ cargo install --path PATH/OF/PGEN-RS-ROOT
+```
+
+where `PATH/OF/PGEN-RS-ROOT` is the path of the root of this repository.
+
 ## Subcommands
 
 ### `query`
