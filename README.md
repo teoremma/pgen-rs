@@ -47,7 +47,8 @@ $ cargo run -- ARGS
 
 to run locally.
 
-We recommend additionally supplying the `--release` flag (e.g. `cargo run --release -- ARGS`) to build 
+We recommend additionally supplying the `--release` flag (e.g. `cargo run
+--release -- ARGS`) to build with optimizations.
 
 To install as `pgen-rs`, use
 
@@ -105,8 +106,9 @@ filter`](https://samtools.github.io/bcftools/bcftools.html#filter), but unlike
 `pgen-rs query` the flags are different here; there are separate include
 expression for the variants and samples.
 
-All expressions have as variables the variant metadata. For example, if querying
-the variants, `CHROM `and `ID `are variables which contain their respective values.
+All expressions have as variables the metadata being queried. For example, if
+querying the variants, `CHROM `and `ID `are variables which contain their
+respective values.
 
 ```
 Usage: pgen-rs filter [OPTIONS] <PFILE_PREFIX>
