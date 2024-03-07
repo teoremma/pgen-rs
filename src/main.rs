@@ -101,10 +101,14 @@ fn main() {
             let pfile = Pfile::from_prefix(pfile_prefix);
             if query_samples {
                 let mut reader = pfile.psam_reader().unwrap();
-                pfile.query_metadata(&mut reader, query, query_fstring).unwrap();
+                pfile
+                    .query_metadata(&mut reader, query, query_fstring)
+                    .unwrap();
             } else {
                 let mut reader = pfile.pvar_reader().unwrap();
-                pfile.query_metadata(&mut reader, query, query_fstring).unwrap();
+                pfile
+                    .query_metadata(&mut reader, query, query_fstring)
+                    .unwrap();
             }
         }
         Commands::Filter {
@@ -114,9 +118,8 @@ fn main() {
             out_file,
         } => {
             let pfile = Pfile::from_prefix(pfile_prefix);
-            let out_file = out_file.unwrap_or_else(|| {
-                format!("{}.pgen-rs.vcf", pfile.pfile_prefix).into()
-            });
+            let out_file =
+                out_file.unwrap_or_else(|| format!("{}.pgen-rs.vcf", pfile.pfile_prefix).into());
             pfile.output_vcf(sam_query, var_query, out_file).unwrap();
         }
     }

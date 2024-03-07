@@ -5,7 +5,6 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 pub struct Cli {
-
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -37,7 +36,7 @@ pub enum Commands {
         query_samples: bool,
     },
     /// Filters the pgen, outputting to a VCF.
-    /// 
+    ///
     /// All expressions have as variables the variant metadata. For example, if
     /// querying the variants, CHROM and ID are variables which contain their
     /// respective values.
@@ -59,5 +58,5 @@ pub enum Commands {
         #[arg(short = 'o', long = "out")]
         /// The output file name (defaults to PFILE_PREFIX.pgen-rs.vcf)
         out_file: Option<PathBuf>,
-    }
+    },
 }

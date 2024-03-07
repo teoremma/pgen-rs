@@ -1,5 +1,8 @@
 use csv::{Reader, ReaderBuilder, StringRecord};
-use evalexpr::{eval_boolean_with_context, ContextWithMutableVariables, HashMapContext, Value, eval_string_with_context};
+use evalexpr::{
+    eval_boolean_with_context, eval_string_with_context, ContextWithMutableVariables,
+    HashMapContext, Value,
+};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
@@ -72,7 +75,12 @@ impl Pfile {
         }
     }
 
-    pub fn query_metadata(&self, reader: &mut Reader<File>, query: Option<String>, f_string: String) -> csv::Result<()> {
+    pub fn query_metadata(
+        &self,
+        reader: &mut Reader<File>,
+        query: Option<String>,
+        f_string: String,
+    ) -> csv::Result<()> {
         let headers: StringRecord = reader.headers()?.clone();
         for (_idx, rcd) in reader.records().enumerate() {
             let rcd = rcd?;
@@ -93,19 +101,31 @@ impl Pfile {
         Ok(())
     }
 
-    pub fn output_vcf(&self, sam_query: Option<String>, var_query: Option<String>, filename: PathBuf) -> csv::Result<()> {
+    pub fn output_vcf(
+        &self,
+        sam_query: Option<String>,
+        var_query: Option<String>,
+        filename: PathBuf,
+    ) -> csv::Result<()> {
         let (pvar_header, pvar_column_names) = self.read_pvar_header();
         let mut psam_reader = self.psam_reader()?;
         let sam_header = psam_reader.headers()?;
         // Index of the sample id in each sample record.
-        let sam_rcd_id_idx = sam_header.iter().enumerate().find_map(|(idx, col)| {
-            // TODO: make this a constant
-            if col == "IID" {
-                Some(idx)
-            } else {
-                None
-            }
-        }).expect(&format!("IID not among the headers of {}", self.psam_path()));
+        let sam_rcd_id_idx = sam_header
+            .iter()
+            .enumerate()
+            .find_map(|(idx, col)| {
+                // TODO: make this a constant
+                if col == "IID" {
+                    Some(idx)
+                } else {
+                    None
+                }
+            })
+            .expect(&format!(
+                "IID not among the headers of {}",
+                self.psam_path()
+            ));
         let var_idx_rcds = self.filter_metadata(&mut self.pvar_reader()?, var_query)?;
         let sam_idx_rcs = self.filter_metadata(&mut psam_reader, sam_query)?;
         // println!("filtered metadata");
@@ -155,7 +175,7 @@ impl Pfile {
                 let host_byte = record_buf[sample_offset as usize];
                 let in_byte_offset = sam_idx % 4;
                 let encoded_genotype = (host_byte >> (in_byte_offset * 2)) & 0b11;
-// 
+                //
                 let genotype = match encoded_genotype {
                     0b00 => "0/0",
                     0b01 => "0/1",
@@ -291,7 +311,11 @@ impl Pfile {
         Pfile::metadata_file_reader(self.psam_path(), self.num_samples as usize)
     }
 
-    fn filter_metadata(&self, meta_reader: &mut Reader<File>, query: Option<String>) -> csv::Result<Vec<(usize, StringRecord)>> {
+    fn filter_metadata(
+        &self,
+        meta_reader: &mut Reader<File>,
+        query: Option<String>,
+    ) -> csv::Result<Vec<(usize, StringRecord)>> {
         let headers: StringRecord = meta_reader.headers()?.clone();
         let mut kept_idx_vars = Vec::new();
         for (idx, rcd) in meta_reader.records().enumerate() {
@@ -311,5 +335,4 @@ impl Pfile {
         }
         Ok(kept_idx_vars)
     }
-
 }
