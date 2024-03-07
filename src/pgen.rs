@@ -140,7 +140,7 @@ impl Pgen {
     fn check_variant_block_offsets(&self, offset: u64) -> u64 {
         let file = File::open(self.file_path.clone()).unwrap();
         let mut reader = BufReader::new(file);
-        _ = reader.seek(SeekFrom::Start(offset as u64)).unwrap();
+        _ = reader.seek(SeekFrom::Start(offset)).unwrap();
 
         // right now we are reading all this to memory
         // we might want to to this in chunks

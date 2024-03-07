@@ -38,7 +38,7 @@ impl Pfile {
     pub fn from_prefix(pfile_prefix: String) -> Pfile {
         let pgen_path = format!("{}.pgen", pfile_prefix);
 
-        let pgen = File::open(&pgen_path).unwrap();
+        let pgen = File::open(pgen_path).unwrap();
         let mut pgen_reader = BufReader::new(pgen);
 
         let mut buf = [0u8; 2];
@@ -122,10 +122,8 @@ impl Pfile {
                     None
                 }
             })
-            .expect(&format!(
-                "IID not among the headers of {}",
-                self.psam_path()
-            ));
+            .unwrap_or_else(|| panic!("IID not among the headers of {}",
+                self.psam_path()));
         let var_idx_rcds = self.filter_metadata(&mut self.pvar_reader()?, var_query)?;
         let sam_idx_rcs = self.filter_metadata(&mut psam_reader, sam_query)?;
         // println!("filtered metadata");
@@ -138,17 +136,17 @@ impl Pfile {
         let vcf = File::create(filename)?;
         let mut vcf_writer = BufWriter::new(vcf);
         // write the header
-        write!(vcf_writer, "##fileformat=VCFv4.2\n").unwrap();
-        write!(vcf_writer, "##source=pgen-rs\n").unwrap();
+        writeln!(vcf_writer, "##fileformat=VCFv4.2").unwrap();
+        writeln!(vcf_writer, "##source=pgen-rs").unwrap();
         write!(vcf_writer, "{}", pvar_header).unwrap();
 
         // avoid push_str since it is slow
         let pvar_column_names = pvar_column_names.trim().to_string();
         write!(vcf_writer, "{}", pvar_column_names).unwrap();
-        write!(vcf_writer, "\tFORMAT\t{}\n", &sam_ids).unwrap();
+        writeln!(vcf_writer, "\tFORMAT\t{}", &sam_ids).unwrap();
 
         // now the fun part, write the actual data
-        let pgen = File::open(&self.pgen_path()).unwrap();
+        let pgen = File::open(self.pgen_path()).unwrap();
         // seems that BufReader makes things slower
         // let mut pgen_reader = BufReader::new(pgen);
         let mut pgen_reader = pgen;
@@ -172,7 +170,7 @@ impl Pfile {
             pgen_reader.read_exact(&mut record_buf).unwrap();
             for (sam_idx, _sam_rcd) in sam_idx_rcs.iter() {
                 let sample_offset = sam_idx / 4;
-                let host_byte = record_buf[sample_offset as usize];
+                let host_byte = record_buf[sample_offset];
                 let in_byte_offset = sam_idx % 4;
                 let encoded_genotype = (host_byte >> (in_byte_offset * 2)) & 0b11;
                 //
@@ -197,19 +195,19 @@ impl Pfile {
 
     fn variant_record_size(&self) -> u32 {
         let bit_size = self.num_samples * 2;
-        let byte_size = (bit_size / 8) + if bit_size % 8 == 0 { 0 } else { 1 };
-        byte_size
+        
+        (bit_size / 8) + if bit_size % 8 == 0 { 0 } else { 1 }
     }
 
     fn read_pvar_header(&self) -> (String, String) {
-        let pvar = File::open(&self.pvar_path()).unwrap();
+        let pvar = File::open(self.pvar_path()).unwrap();
         let mut pvar_reader = BufReader::new(pvar);
         // read all lines that start with # and store them in a vector
         let mut header_lines = Vec::new();
         loop {
             let mut buf = String::new();
             pvar_reader.read_line(&mut buf).unwrap();
-            if buf.starts_with("#") {
+            if buf.starts_with('#') {
                 header_lines.push(buf);
             } else {
                 break;
@@ -257,8 +255,8 @@ impl Pfile {
             buf = String::new();
             meta_raw_reader.read_line(&mut buf)?;
             // We are reading the data now
-            if !buf.starts_with("#") {
-                let current_pos = meta_raw_reader.seek(SeekFrom::Current(0))?;
+            if !buf.starts_with('#') {
+                let current_pos = meta_raw_reader.stream_position()?;
                 // The current line is not what we're looking for.
                 // The header is the previous line, but it is forced to start
                 // with a #.
@@ -281,7 +279,7 @@ impl Pfile {
             // we seek to exactly where the headers start
             .has_headers(true)
             .from_reader(meta_file);
-        return Ok(meta_reader);
+        Ok(meta_reader)
     }
 
     pub fn pvar_reader(&self) -> io::Result<Reader<File>> {
