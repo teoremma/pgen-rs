@@ -111,8 +111,10 @@ $ pgen-rs filter data/basic1/basic1 --include-sam 'IID == "NA20900"' --include-v
 
 We downloaded chr22 from the [1000Genomes
 dataset](https://www.internationalgenome.org/) and ran some simple (and
-unscientific) comparisons. Note that we did not make an index for `bcftools`,
-which presumably improves its speed significantly.
+unscientific) comparisons. We ran `bcftools index` on the gzipped vcf, although
+we didn't observe it to make any performance difference (possibly it would for
+queries, but our query support is so simplistic that the queries are not very
+interesting).
 
 We anticipate that `pgen-rs` is able to scale better than `bcftools` because of
 two reasons.
