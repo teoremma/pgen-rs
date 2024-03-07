@@ -215,7 +215,11 @@ like to support, such as
 
 ## How you can help
 
-If you are interested in this tool and find it limiting in some way, you should
+As this work was done for a class project, we may not continue it afterwards.
+However, PRs or issues are welcome. We're interested in doing work that is
+useful to the community, so we'd be happy to collaborate or transfer ownership.
+
+If you are interested in this tool and find it limiting in some way, you can
 [file an issue](https://github.com/teoremma/pgen-rs/issues) describing the
 feature(s) you want it to have.
 
@@ -269,3 +273,43 @@ would be to support more of its domain-specific functions.
 
 Also, all variables are strings (for now). We don't have any logic to parse a
 numeric field into a numeric variable.
+
+## Additional information
+This work was done for a class project. The sections here are provided for
+purposes of evaluating this project.
+
+### Challenges
+
+There are three main challenges we face(d).
+
+1. **The .pgen format.** This format is difficult and varied. We ended up only
+   supporting one type (`0x02`) of storage mode among many because of two
+   reasons: (1) it was simpler and (2) it is the easiest to query and filter.
+   There are good reasons for having the other formats (see the spec), but it
+   was enough work already to parse the simple format we ended up working with.
+2. **The expression language.** Although we have stuck with a premade expression
+   language for simplicity, it is the reason why our querying and filtering is
+   so simplistic at present. Incorporating an existing expression language was
+   already a challenge; we expect designing and incorporating a new one to be
+   even more difficult.
+3. **Performance** One of our main goals was to make a more performant way of
+   filtering and querying. Yet outputting a .pgen to a .vcf without any filters
+   initially took signficantly longer than simply copying the .vcf. In theory
+   there should be only a little overhead and not an order of magnitude of
+   difference in execution time. We had to put in some engineering work -
+   especially to understand file I/O in Rust - to improve the speeds. There
+   still is a sizable difference on big files (a 4GB .vcf takes ~5s to copy but
+   ~20s for us to convert from .pgen), but for most files the difference is
+   small enough. We think that we are not that limited by file I/O anymore, but
+   we didn't profile especially carefully.
+
+### Remaining work
+
+The **Next Steps** section above details additional work we would like to do, as
+well as some sections beneath it.
+
+### Group information
+Group number: 10
+
+* Emmanuel Anaya Gonzalez
+* Cole Kurashige
