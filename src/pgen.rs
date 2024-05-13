@@ -94,8 +94,50 @@ impl Pgen {
         let variant_records_offset = pgen.check_main_header_body(pgen.main_header_body_offset());
         assert_eq!(variant_records_offset, pgen.variant_records_offset());
 
+        let results = pgen.filter_variants(10).unwrap();
+        println!("Variants with SUM[GT] > 10: {:?}", results);
+
         Ok(pgen)
     }
+
+    // Method to read and decode genotype data for a specific variant
+    fn read_genotype_data(&self, variant_index: u64) -> io::Result<Vec<u8>> {
+      let file = File::open(&self.file_path)?;
+      let mut reader = BufReader::new(file);
+      let offset = self.variant_records_offset();
+
+      reader.seek(SeekFrom::Start(offset))?;
+
+      // Assuming simple non-compressed storage for illustration; adapt as needed
+      let num_samples = self.sample_count;
+      let bytes_per_sample = match self.record_type_bits {
+          4 => 1,  // Example: simple 2-bit genotype, packed in a single byte
+          8 => 1,  // Each genotype uses one byte
+          _ => panic!("Unsupported record type"),
+      };
+
+      let mut genotype_data = vec![0; num_samples as usize * bytes_per_sample];
+      reader.read_exact(&mut genotype_data)?;
+
+      Ok(genotype_data)
+  }
+
+  fn filter_variants(&self, threshold: u32) -> io::Result<Vec<u32>> {
+    let mut passing_variants = Vec::new();
+
+    for variant_index in 0..self.variant_count {
+        let genotype_data = self.read_genotype_data(variant_index as u64)?;
+        let sum: u32 = genotype_data.iter()
+            .map(|&gt| u32::from(gt))
+            .sum();
+
+        if sum > threshold {
+            passing_variants.push(variant_index);
+        }
+    }
+
+    Ok(passing_variants)
+  }
 
     fn variant_block_count(&self) -> u64 {
         (self.variant_count as u64 + Pgen::VARIANT_BLOCK_SIZE - 1) / Pgen::VARIANT_BLOCK_SIZE

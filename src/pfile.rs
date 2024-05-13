@@ -93,6 +93,7 @@ impl Pfile {
             let query_res = query.as_ref().map_or(true, |query| {
                 eval_boolean_with_context(query, &context).unwrap()
             });
+            
             if query_res {
                 let output = eval_string_with_context(&f_string, &context).unwrap();
                 println!("{}", output);

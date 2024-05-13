@@ -5,21 +5,22 @@ mod pgen;
 use clap::Parser;
 use cli::{Cli, Commands};
 use pfile::Pfile;
+use pgen::Pgen;
 
-// fn test_pgen() {
-//     let test_pgens = vec![
-//         // "data/sample1/1000G_chr19_pruned.pgen",
-//         // "data/sample2/pset1_1000G_chr16.pgen",
-//         "data/random1/random1.pgen",
-//         // "data/random2/random2.pgen",
-//         "data/basic1/basic1.pgen",
-//     ];
-//     for pgen_path in test_pgens {
-//         println!("testing file: {}", pgen_path);
-//         let pgen = Pgen::from_file_path(pgen_path.to_string()).unwrap();
-//         println!("\n");
-//     }
-// }
+fn test_pgen() {
+    let test_pgens = vec![
+        // "data/sample1/1000G_chr19_pruned.pgen",
+        // "data/sample2/pset1_1000G_chr16.pgen",
+        "data/random1/random1.pgen",
+        // "data/random2/random2.pgen",
+        "data/basic1/basic1.pgen",
+    ];
+    for pgen_path in test_pgens {
+        println!("testing file: {}", pgen_path);
+        let pgen = Pgen::from_file_path(pgen_path.to_string()).unwrap();
+        println!("\n");
+    }
+}
 //
 // fn test_pfile() {
 //     let pfile_prefix = "data/basic1/basic1";
@@ -61,7 +62,7 @@ use pfile::Pfile;
 //     //     "per4".to_string(),
 //     //     "per8".to_string(),
 //     // ];
-//
+
 //     let variant_ids = vec![
 //         "snp0".to_string(),
 //         "snp1".to_string(),
@@ -90,38 +91,38 @@ use pfile::Pfile;
 // }
 
 fn main() {
-    let cli = Cli::parse();
-    match cli.command {
-        Commands::Query {
-            pfile_prefix,
-            query_fstring,
-            query,
-            query_samples,
-        } => {
-            let pfile = Pfile::from_prefix(pfile_prefix);
-            if query_samples {
-                let mut reader = pfile.psam_reader().unwrap();
-                pfile
-                    .query_metadata(&mut reader, query, query_fstring)
-                    .unwrap();
-            } else {
-                let mut reader = pfile.pvar_reader().unwrap();
-                pfile
-                    .query_metadata(&mut reader, query, query_fstring)
-                    .unwrap();
-            }
-        }
-        Commands::Filter {
-            pfile_prefix,
-            var_query,
-            sam_query,
-            out_file,
-        } => {
-            let pfile = Pfile::from_prefix(pfile_prefix);
-            let out_file =
-                out_file.unwrap_or_else(|| format!("{}.pgen-rs.vcf", pfile.pfile_prefix).into());
-            pfile.output_vcf(sam_query, var_query, out_file).unwrap();
-        }
-    }
-    // test_pfile2();
+  test_pgen();
+    // let cli = Cli::parse();
+    // match cli.command {
+    //     Commands::Query {
+    //         pfile_prefix,
+    //         query_fstring,
+    //         query,
+    //         query_samples,
+    //     } => {
+    //         let pfile = Pfile::from_prefix(pfile_prefix);
+    //         if query_samples {
+    //             let mut reader = pfile.psam_reader().unwrap();
+    //             pfile
+    //                 .query_metadata(&mut reader, query, query_fstring)
+    //                 .unwrap();
+    //         } else {
+    //             let mut reader = pfile.pvar_reader().unwrap();
+    //             pfile
+    //                 .query_metadata(&mut reader, query, query_fstring)
+    //                 .unwrap();
+    //         }
+    //     }
+    //     Commands::Filter {
+    //         pfile_prefix,
+    //         var_query,
+    //         sam_query,
+    //         out_file,
+    //     } => {
+    //         let pfile = Pfile::from_prefix(pfile_prefix);
+    //         let out_file =
+    //             out_file.unwrap_or_else(|| format!("{}.pgen-rs.vcf", pfile.pfile_prefix).into());
+    //         pfile.output_vcf(sam_query, var_query, out_file).unwrap();
+    //     }
+    // }
 }
