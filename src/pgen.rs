@@ -1,6 +1,10 @@
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{self, BufReader, Read, Seek, SeekFrom};
+use evalexpr::{
+  eval_boolean_with_context, eval_string_with_context, ContextWithMutableVariables,
+  HashMapContext, Value,
+};
 
 pub struct Pgen {
     // magic_number: [u8; 2],
@@ -94,16 +98,17 @@ impl Pgen {
         let variant_records_offset = pgen.check_main_header_body(pgen.main_header_body_offset());
         assert_eq!(variant_records_offset, pgen.variant_records_offset());
 
-        let results = pgen.filter_variants(10).unwrap();
-        println!("Variants with SUM[GT] > 10: {:?}", results);
+        let passing_variants = pgen.filter_variants_with_expression("sum > 1500", &mut buf_reader).unwrap();
+        println!("Passing variants: {:?}", passing_variants);
+
 
         Ok(pgen)
     }
 
     // Method to read and decode genotype data for a specific variant
-    fn read_genotype_data(&self, variant_index: u64) -> io::Result<Vec<u8>> {
-      let file = File::open(&self.file_path)?;
-      let mut reader = BufReader::new(file);
+    fn read_genotype_data(&self, variant_index: u64, reader: &mut BufReader<File>) -> io::Result<Vec<u8>> {
+      // let file = File::open(&self.file_path)?;
+      // let mut reader = BufReader::new(file);
       let offset = self.variant_records_offset();
 
       reader.seek(SeekFrom::Start(offset))?;
@@ -122,22 +127,36 @@ impl Pgen {
       Ok(genotype_data)
   }
 
-  fn filter_variants(&self, threshold: u32) -> io::Result<Vec<u32>> {
+  fn filter_variants_with_expression(&self, expression: &str, reader: &mut BufReader<File>) -> io::Result<Vec<u32>> {
     let mut passing_variants = Vec::new();
-
     for variant_index in 0..self.variant_count {
-        let genotype_data = self.read_genotype_data(variant_index as u64)?;
-        let sum: u32 = genotype_data.iter()
-            .map(|&gt| u32::from(gt))
-            .sum();
+        let genotype_data = self.read_genotype_data(variant_index as u64, reader).unwrap();
+        let context = self.create_context(variant_index as u64, &genotype_data);
 
-        if sum > threshold {
-            passing_variants.push(variant_index);
+        match eval_boolean_with_context(expression, &context) {
+            Ok(result) if result => passing_variants.push(variant_index),
+            Ok(_) => (),
+            Err(e) => eprintln!("Failed to evaluate expression: {}", e),
         }
     }
-
     Ok(passing_variants)
   }
+
+  fn create_context(&self, variant_index: u64, genotype_data: &[u8]) -> HashMapContext {
+      let mut context = HashMapContext::new();
+      // Assuming genotype_data is a Vec<u8> where each byte is a genotype like 0/1, 1/1, etc.
+      context.set_value("variant_index".into(), Value::from(variant_index as i64)).unwrap();
+      
+      let sum: i64 = genotype_data.iter().map(|&gt| gt as i64).sum();
+      let avg: f64 = sum as f64 / genotype_data.len() as f64;
+      
+      context.set_value("sum".into(), Value::from(sum)).unwrap();
+      context.set_value("avg".into(), Value::from(avg)).unwrap();
+      
+      // Add more variables to the context as needed
+      context
+  }
+
 
     fn variant_block_count(&self) -> u64 {
         (self.variant_count as u64 + Pgen::VARIANT_BLOCK_SIZE - 1) / Pgen::VARIANT_BLOCK_SIZE

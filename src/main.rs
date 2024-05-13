@@ -92,6 +92,7 @@ fn test_pgen() {
 
 fn main() {
   test_pgen();
+
     // let cli = Cli::parse();
     // match cli.command {
     //     Commands::Query {
