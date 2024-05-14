@@ -175,8 +175,7 @@ async fn run_tui()  {
 
           let list = List::new(items.clone())
               .block(Block::default().borders(Borders::ALL))
-              .highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Blue))
-              .highlight_symbol(">> ");
+              .highlight_style(Style::default());
 
           let mut list_state = tui::widgets::ListState::default();
           list_state.select(Some(current_selection));
