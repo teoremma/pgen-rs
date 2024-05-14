@@ -21,7 +21,9 @@ use tui::{
 };
 use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen, screen::IntoAlternateScreen, event::Key, input::TermRead};
 use std::io::{self, Write};
-use tokio::runtime::Runtime;
+use tokio::{runtime::Runtime, sync::mpsc};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 
 fn test_pgen() {
     let test_pgens = vec![
@@ -110,10 +112,19 @@ fn main() {
   // test_pgen();
   
     let cli = Cli::parse();
-    if cli.interactive {
-      // If interactive mode is enabled, run the TUI
-      let rt = Runtime::new().unwrap();
-      rt.block_on(run_tui());
+  if cli.interactive {
+    let rt = Runtime::new().unwrap();
+    rt.block_on(async {
+        let (tx, mut rx) = mpsc::channel(100);
+
+        // Start the background task that fetches items
+        let api_key = "your_openai_api_key".to_string();
+        tokio::spawn(async move {
+            generate_items(tx, api_key).await;
+        });
+
+        run_tui(&mut rx).await;
+    });
   } else if let Some(command) = cli.command {
     match command {
         Commands::Query {
@@ -150,22 +161,65 @@ fn main() {
   }
 }
 
-async fn run_tui()  {
-    let mut stdout = io::stdout().into_alternate_screen().unwrap();
-    let backend = TermionBackend::new(stdout);
-    let mut terminal = Terminal::new(backend).unwrap();
-    let stdin = io::stdin();
-    let mut keys = stdin.keys();
+#[derive(Serialize)]
+struct OpenAIRequest {
+    prompt: String,
+    max_tokens: usize,
+}
 
-    let items = vec![
-        ListItem::new("Option 1"),
-        ListItem::new("Option 2"),
-        ListItem::new("Option 3"),
-    ];
+#[derive(Deserialize)]
+struct OpenAIResponse {
+    choices: Vec<Choice>,
+}
 
-    let mut current_selection = 0;
+#[derive(Deserialize)]
+struct Choice {
+    text: String,
+}
 
-    loop {
+async fn fetch_response_from_ai(prompt: &str, api_key: &str) -> Result<String, reqwest::Error> {
+  let client = Client::new();
+  let request_body = OpenAIRequest {
+      prompt: prompt.to_string(),
+      max_tokens: 50,
+  };
+
+  let response = client.post("https://api.openai.com/v1/engines/davinci/completions")
+      .header("Authorization", format!("Bearer {}", api_key))
+      .json(&request_body)
+      .send()
+      .await?
+      .json::<OpenAIResponse>()
+      .await?;
+
+  Ok(response.choices.get(0).map_or(String::new(), |c| c.text.clone()))
+}
+
+async fn generate_items(mut sender: mpsc::Sender<Vec<ListItem<'static>>>, api_key: String) {
+  let prompts = vec!["Hello, world!", "Today's weather is", "Latest tech trends"];
+  let mut items = Vec::new();
+
+  for prompt in prompts {
+      if let Ok(response) = fetch_response_from_ai(prompt, &api_key).await {
+          items.push(ListItem::new(response));
+      } else {
+          items.push(ListItem::new("Error fetching AI response"));
+      }
+  }
+
+  sender.send(items).await.unwrap();
+}
+
+async fn run_tui(rx: &mut mpsc::Receiver<Vec<ListItem<'static>>>) {
+  let mut stdout = io::stdout().into_alternate_screen().unwrap();
+  let backend = TermionBackend::new(stdout);
+  let mut terminal = Terminal::new(backend).unwrap();
+  let stdin = io::stdin();
+  let mut keys = stdin.keys();
+
+  let mut items = vec![];
+
+  loop {
       terminal.draw(|f| {
           let chunks = Layout::default()
               .direction(Direction::Vertical)
@@ -175,21 +229,27 @@ async fn run_tui()  {
 
           let list = List::new(items.clone())
               .block(Block::default().borders(Borders::ALL))
-              .highlight_style(Style::default());
+              .highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Blue))
+              .highlight_symbol(">> ");
 
           let mut list_state = tui::widgets::ListState::default();
-          list_state.select(Some(current_selection));
+          // list_state.select(Some(0)); // Modify as needed to handle selection correctly
           f.render_stateful_widget(list, chunks[0], &mut list_state);
-      });
+      }).unwrap();
 
-      // Update keys handling
+      // Check for new items from the channel
+      if let Ok(new_items) = rx.try_recv() {
+          items = new_items;
+      }
+
+      // Handle key presses
       if let Some(Ok(key)) = keys.next() {
           match key {
               Key::Char('q') => break,
-              Key::Down => current_selection = (current_selection + 1).min(items.len() - 1),
-              Key::Up => if current_selection > 0 { current_selection -= 1 },
+              // Handle other keys as necessary
               _ => {}
           }
       }
   }
 }
+
