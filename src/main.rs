@@ -6,6 +6,22 @@ use clap::Parser;
 use cli::{Cli, Commands};
 use pfile::Pfile;
 use pgen::Pgen;
+use crossterm::{
+  event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers},
+  execute,
+  terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+};
+use tui::{
+  backend::TermionBackend,
+  widgets::{Widget, List, ListItem, ListState, Block, Borders},
+  layout::{Layout, Constraint, Direction},
+  Terminal,
+  Frame,
+  style::{Style, Modifier, Color},
+};
+use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen, screen::IntoAlternateScreen, event::Key, input::TermRead};
+use std::io::{self, Write};
+use tokio::runtime::Runtime;
 
 fn test_pgen() {
     let test_pgens = vec![
@@ -91,39 +107,90 @@ fn test_pgen() {
 // }
 
 fn main() {
-  test_pgen();
+  // test_pgen();
+  
+    let cli = Cli::parse();
+    if cli.interactive {
+      // If interactive mode is enabled, run the TUI
+      let rt = Runtime::new().unwrap();
+      rt.block_on(run_tui());
+  } else if let Some(command) = cli.command {
+    match command {
+        Commands::Query {
+            pfile_prefix,
+            query_fstring,
+            query,
+            query_samples,
+        } => {
+            let pfile = Pfile::from_prefix(pfile_prefix);
+            if query_samples {
+                let mut reader = pfile.psam_reader().unwrap();
+                pfile
+                    .query_metadata(&mut reader, query, query_fstring)
+                    .unwrap();
+            } else {
+                let mut reader = pfile.pvar_reader().unwrap();
+                pfile
+                    .query_metadata(&mut reader, query, query_fstring)
+                    .unwrap();
+            }
+        }
+        Commands::Filter {
+            pfile_prefix,
+            var_query,
+            sam_query,
+            out_file,
+        } => {
+            let pfile = Pfile::from_prefix(pfile_prefix);
+            let out_file =
+                out_file.unwrap_or_else(|| format!("{}.pgen-rs.vcf", pfile.pfile_prefix).into());
+            pfile.output_vcf(sam_query, var_query, out_file).unwrap();
+        }
+    }
+  }
+}
 
-    // let cli = Cli::parse();
-    // match cli.command {
-    //     Commands::Query {
-    //         pfile_prefix,
-    //         query_fstring,
-    //         query,
-    //         query_samples,
-    //     } => {
-    //         let pfile = Pfile::from_prefix(pfile_prefix);
-    //         if query_samples {
-    //             let mut reader = pfile.psam_reader().unwrap();
-    //             pfile
-    //                 .query_metadata(&mut reader, query, query_fstring)
-    //                 .unwrap();
-    //         } else {
-    //             let mut reader = pfile.pvar_reader().unwrap();
-    //             pfile
-    //                 .query_metadata(&mut reader, query, query_fstring)
-    //                 .unwrap();
-    //         }
-    //     }
-    //     Commands::Filter {
-    //         pfile_prefix,
-    //         var_query,
-    //         sam_query,
-    //         out_file,
-    //     } => {
-    //         let pfile = Pfile::from_prefix(pfile_prefix);
-    //         let out_file =
-    //             out_file.unwrap_or_else(|| format!("{}.pgen-rs.vcf", pfile.pfile_prefix).into());
-    //         pfile.output_vcf(sam_query, var_query, out_file).unwrap();
-    //     }
-    // }
+async fn run_tui()  {
+    let mut stdout = io::stdout().into_alternate_screen().unwrap();
+    let backend = TermionBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let stdin = io::stdin();
+    let mut keys = stdin.keys();
+
+    let items = vec![
+        ListItem::new("Option 1"),
+        ListItem::new("Option 2"),
+        ListItem::new("Option 3"),
+    ];
+
+    let mut current_selection = 0;
+
+    loop {
+      terminal.draw(|f| {
+          let chunks = Layout::default()
+              .direction(Direction::Vertical)
+              .margin(1)
+              .constraints([Constraint::Percentage(100)].as_ref())
+              .split(f.size());
+
+          let list = List::new(items.clone())
+              .block(Block::default().borders(Borders::ALL))
+              .highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Blue))
+              .highlight_symbol(">> ");
+
+          let mut list_state = tui::widgets::ListState::default();
+          list_state.select(Some(current_selection));
+          f.render_stateful_widget(list, chunks[0], &mut list_state);
+      });
+
+      // Update keys handling
+      if let Some(Ok(key)) = keys.next() {
+          match key {
+              Key::Char('q') => break,
+              Key::Down => current_selection = (current_selection + 1).min(items.len() - 1),
+              Key::Up => if current_selection > 0 { current_selection -= 1 },
+              _ => {}
+          }
+      }
+  }
 }
