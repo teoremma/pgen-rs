@@ -20,9 +20,9 @@ use tui::{
   style::{Style, Modifier, Color},
 };
 use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen, screen::IntoAlternateScreen, event::Key, input::TermRead};
-use std::io::{self, Write};
+use std::io::{self, Write, ErrorKind::Other};
 use tokio::{runtime::Runtime, sync::mpsc};
-use reqwest::Client;
+use reqwest::{Client, Error};
 use serde::{Deserialize, Serialize};
 
 fn test_pgen() {
@@ -118,7 +118,7 @@ fn main() {
         let (tx, mut rx) = mpsc::channel(100);
 
         // Start the background task that fetches items
-        let api_key = "your_openai_api_key".to_string();
+        let api_key = "sk-proj-qDMJXXXAXhncc1oRNUNfT3BlbkFJCCbRYQUot0nRunxRwrLT".to_string();
         tokio::spawn(async move {
             generate_items(tx, api_key).await;
         });
@@ -191,21 +191,24 @@ async fn fetch_response_from_ai(prompt: &str, api_key: &str) -> Result<String, r
       .await?
       .json::<OpenAIResponse>()
       .await?;
-
+      
   Ok(response.choices.get(0).map_or(String::new(), |c| c.text.clone()))
 }
+
 
 async fn generate_items(mut sender: mpsc::Sender<Vec<ListItem<'static>>>, api_key: String) {
   let prompts = vec!["Hello, world!", "Today's weather is", "Latest tech trends"];
   let mut items = Vec::new();
 
   for prompt in prompts {
-      if let Ok(response) = fetch_response_from_ai(prompt, &api_key).await {
-          items.push(ListItem::new(response));
-      } else {
-          items.push(ListItem::new("Error fetching AI response"));
-      }
-  }
+    match fetch_response_from_ai(prompt, &api_key).await {
+        Ok(response) => items.push(ListItem::new(response)),
+        Err(err) => {
+            eprintln!("Error fetching AI response: {:?}", err);
+            items.push(ListItem::new("Error fetching AI response"));
+        }
+    }
+}
 
   sender.send(items).await.unwrap();
 }
