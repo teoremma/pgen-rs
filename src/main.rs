@@ -21,8 +21,9 @@ use tui::{
 };
 use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen, screen::IntoAlternateScreen, event::Key, input::TermRead};
 use std::io::{self, Write, ErrorKind::Other};
+use std::error::Error as StdError;
 use tokio::{runtime::Runtime, sync::mpsc};
-use reqwest::{Client, Error};
+use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 
 fn test_pgen() {
@@ -118,7 +119,7 @@ fn main() {
         let (tx, mut rx) = mpsc::channel(100);
 
         // Start the background task that fetches items
-        let api_key = "sk-proj-qDMJXXXAXhncc1oRNUNfT3BlbkFJCCbRYQUot0nRunxRwrLT".to_string();
+        let api_key = "FAKE_KEY".to_string();
         tokio::spawn(async move {
             generate_items(tx, api_key).await;
         });
@@ -163,36 +164,49 @@ fn main() {
 
 #[derive(Serialize)]
 struct OpenAIRequest {
-    prompt: String,
+    messages: Vec<Message>,
     max_tokens: usize,
+    model: String,
 }
 
-#[derive(Deserialize)]
-struct OpenAIResponse {
-    choices: Vec<Choice>,
+#[derive(Debug, Serialize)]
+struct Message {
+    role: String,
+    content: String,
 }
 
-#[derive(Deserialize)]
-struct Choice {
-    text: String,
-}
-
-async fn fetch_response_from_ai(prompt: &str, api_key: &str) -> Result<String, reqwest::Error> {
-  let client = Client::new();
+async fn fetch_response_from_ai(prompt: &str, api_key: &str) -> Result<String, Box<dyn StdError>> {
+  let client = reqwest::Client::new();
   let request_body = OpenAIRequest {
-      prompt: prompt.to_string(),
-      max_tokens: 50,
+    messages: vec![Message {
+      role: "user".to_string(),
+      content: prompt.to_string(),
+    }],
+    max_tokens: 50,
+    model: "gpt-3.5-turbo".to_string(),
   };
 
-  let response = client.post("https://api.openai.com/v1/engines/davinci/completions")
+  let response = client
+      .post("https://api.openai.com/v1/chat/completions")
       .header("Authorization", format!("Bearer {}", api_key))
       .json(&request_body)
       .send()
       .await?
-      .json::<OpenAIResponse>()
+      .json::<serde_json::Value>() // Deserialize response into serde_json::Value
       .await?;
-      
-  Ok(response.choices.get(0).map_or(String::new(), |c| c.text.clone()))
+
+  let response_text = response.to_string();
+  // println!("Response Text: {}", response_text);
+
+  if let Some(choices) = response.get("choices") {
+    if let Some(choice) = choices.as_array().and_then(|arr| arr.get(0)) {
+        if let Some(message) = choice.get("message").and_then(|msg| msg.get("content").and_then(|c| c.as_str())) {
+            return Ok(message.to_string());
+        }
+    }
+  }
+
+  Err("No valid choices found in API response".into())
 }
 
 
