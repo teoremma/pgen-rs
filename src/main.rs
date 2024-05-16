@@ -25,6 +25,7 @@ use std::error::Error as StdError;
 use tokio::{runtime::Runtime, sync::mpsc};
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
 
 fn test_pgen() {
     let test_pgens = vec![
@@ -115,17 +116,22 @@ fn main() {
     let cli = Cli::parse();
   if cli.interactive {
     let rt = Runtime::new().unwrap();
-    rt.block_on(async {
-        let (tx, mut rx) = mpsc::channel(100);
+        rt.block_on(async {
+          enable_raw_mode().expect("Failed to enable raw mode");
+          let (tx, rx) = mpsc::channel(100); // Changed to non-mutable rx
+          let (signal_tx, mut signal_rx) = mpsc::channel(1); // Channel for signaling to start generate_items
 
-        // Start the background task that fetches items
-        let api_key = "FAKE_KEY".to_string();
-        tokio::spawn(async move {
-            generate_items(tx, api_key).await;
+            
+            tokio::spawn(async move {
+              run_tui(rx, signal_tx).await;
+            });
+
+            // If a signal is received, start generate_items
+            while let Some(_) = signal_rx.recv().await {
+              let api_key = "FAKE_KEY".to_string();
+              generate_items(tx.clone(), api_key).await;
+            }
         });
-
-        run_tui(&mut rx).await;
-    });
   } else if let Some(command) = cli.command {
     match command {
         Commands::Query {
@@ -209,9 +215,8 @@ async fn fetch_response_from_ai(prompt: &str, api_key: &str) -> Result<String, B
   Err("No valid choices found in API response".into())
 }
 
-
 async fn generate_items(mut sender: mpsc::Sender<Vec<ListItem<'static>>>, api_key: String) {
-  let prompts = vec!["Hello, world!", "Today's weather is", "Latest tech trends"];
+  let prompts = vec!["Please generate a query for genomic data using bcftools"];
   let mut items = Vec::new();
 
   for prompt in prompts {
@@ -227,46 +232,93 @@ async fn generate_items(mut sender: mpsc::Sender<Vec<ListItem<'static>>>, api_ke
   sender.send(items).await.unwrap();
 }
 
-async fn run_tui(rx: &mut mpsc::Receiver<Vec<ListItem<'static>>>) {
+#[derive(Clone)]
+struct SharedState {
+    user_input: Arc<Mutex<String>>,
+}
+
+async fn run_tui(mut rx: mpsc::Receiver<Vec<ListItem<'static>>>, signal_tx: mpsc::Sender<()>) {
   let mut stdout = io::stdout().into_alternate_screen().unwrap();
   let backend = TermionBackend::new(stdout);
   let mut terminal = Terminal::new(backend).unwrap();
   let stdin = io::stdin();
   let mut keys = stdin.keys();
-
+  let user_input = Arc::new(Mutex::new(String::new()));
+  let shared_state = SharedState {
+      user_input: user_input.clone(),
+  };
   let mut items = vec![];
 
   loop {
-      terminal.draw(|f| {
-          let chunks = Layout::default()
-              .direction(Direction::Vertical)
-              .margin(1)
-              .constraints([Constraint::Percentage(100)].as_ref())
-              .split(f.size());
+    terminal.draw(|f| {
+      let chunks = Layout::default()
+          .direction(Direction::Vertical)
+          .margin(1)
+          .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref()) // Change here
+          .split(f.size());
 
-          let list = List::new(items.clone())
-              .block(Block::default().borders(Borders::ALL))
-              .highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Blue))
-              .highlight_symbol(">> ");
+      // Render AI-generated queries
+      let list = List::new(items.clone())
+          .block(Block::default().borders(Borders::ALL))
+          .highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Blue))
+          .highlight_symbol(">> ");
 
-          let mut list_state = tui::widgets::ListState::default();
-          // list_state.select(Some(0)); // Modify as needed to handle selection correctly
-          f.render_stateful_widget(list, chunks[0], &mut list_state);
-      }).unwrap();
+      let mut list_state = tui::widgets::ListState::default();
+      f.render_stateful_widget(list, chunks[0], &mut list_state);
 
-      // Check for new items from the channel
-      if let Ok(new_items) = rx.try_recv() {
-          items = new_items;
-      }
+      // Render user input
+      let user_input_style = Style::default().fg(Color::Yellow);
+      let user_input_text = shared_state.user_input.lock().unwrap();
+      f.render_widget(
+          tui::widgets::Paragraph::new(user_input_text.as_str()).style(user_input_style),
+          chunks[1], // Change here
+      );
+  }).unwrap();
 
       // Handle key presses
       if let Some(Ok(key)) = keys.next() {
           match key {
-              Key::Char('q') => break,
-              // Handle other keys as necessary
-              _ => {}
+              Key::Char('q') => {
+                  // println!("EXITING");
+                  break;
+              },
+              Key::Char(' ') => {
+                  // println!("SPACE");
+                  // Send signal to start generate_items
+                  // let mut user_input = shared_state.user_input.lock().unwrap();
+                  // user_input.push(' '); 
+                  if let Err(err) = signal_tx.send(()).await {
+                      eprintln!("Error sending signal to start generate_items: {:?}", err);
+                  }
+              },
+              Key::Char(c) => {
+                  // println!("CHAR {}", c);
+                  let mut user_input = shared_state.user_input.lock().unwrap();
+                  user_input.push(c);
+              }
+              Key::Backspace => {
+                  // println!("BACK");
+                  let mut user_input = shared_state.user_input.lock().unwrap();
+                  user_input.pop();
+              }
+              _ => {
+                  // println!("Unrecognized key: {:?}", key);
+              }
+          }
+      }
+
+      // Check for new items from the channel
+      match rx.try_recv() {
+          Ok(new_items) => {
+              // If receiving succeeds, update the items
+              items = new_items;
+          }
+          Err(_) => {
+              // If an error occurs or there are no new items, continue
           }
       }
   }
-}
 
+  // Disable raw mode
+  disable_raw_mode().expect("Failed to disable raw mode");
+}
