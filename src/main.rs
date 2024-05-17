@@ -12,7 +12,7 @@ use crossterm::{
   terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use tui::{
-  backend::TermionBackend,
+  backend::{TermionBackend, Backend},
   widgets::{Widget, List, ListItem, ListState, Block, Borders},
   layout::{Layout, Constraint, Direction},
   Terminal,
@@ -120,14 +120,14 @@ fn main() {
           enable_raw_mode().expect("Failed to enable raw mode");
           let (tx, rx) = mpsc::channel(100); // Changed to non-mutable rx
           let (signal_tx, mut signal_rx) = mpsc::channel(1); // Channel for signaling to start generate_items
-
-            
+          
             tokio::spawn(async move {
-              run_tui(rx, signal_tx).await;
+              run_tui(rx, signal_tx.clone()).await;
             });
 
             // If a signal is received, start generate_items
             while let Some(_) = signal_rx.recv().await {
+              println!("HERE");
               let api_key = "FAKE_KEY".to_string();
               generate_items(tx.clone(), api_key).await;
             }
@@ -202,7 +202,6 @@ async fn fetch_response_from_ai(prompt: &str, api_key: &str) -> Result<String, B
       .await?;
 
   let response_text = response.to_string();
-  // println!("Response Text: {}", response_text);
 
   if let Some(choices) = response.get("choices") {
     if let Some(choice) = choices.as_array().and_then(|arr| arr.get(0)) {
@@ -227,7 +226,7 @@ async fn generate_items(mut sender: mpsc::Sender<Vec<ListItem<'static>>>, api_ke
             items.push(ListItem::new("Error fetching AI response"));
         }
     }
-}
+  }
 
   sender.send(items).await.unwrap();
 }
@@ -237,24 +236,12 @@ struct SharedState {
     user_input: Arc<Mutex<String>>,
 }
 
-async fn run_tui(mut rx: mpsc::Receiver<Vec<ListItem<'static>>>, signal_tx: mpsc::Sender<()>) {
-  let mut stdout = io::stdout().into_alternate_screen().unwrap();
-  let backend = TermionBackend::new(stdout);
-  let mut terminal = Terminal::new(backend).unwrap();
-  let stdin = io::stdin();
-  let mut keys = stdin.keys();
-  let user_input = Arc::new(Mutex::new(String::new()));
-  let shared_state = SharedState {
-      user_input: user_input.clone(),
-  };
-  let mut items = vec![];
-
-  loop {
-    terminal.draw(|f| {
+async fn render_ui(terminal: &mut Terminal<impl Backend>, items: &mut Vec<ListItem<'static>>, shared_state: &SharedState) {
+  terminal.draw(|f| {
       let chunks = Layout::default()
           .direction(Direction::Vertical)
           .margin(1)
-          .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref()) // Change here
+          .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref())
           .split(f.size());
 
       // Render AI-generated queries
@@ -271,9 +258,25 @@ async fn run_tui(mut rx: mpsc::Receiver<Vec<ListItem<'static>>>, signal_tx: mpsc
       let user_input_text = shared_state.user_input.lock().unwrap();
       f.render_widget(
           tui::widgets::Paragraph::new(user_input_text.as_str()).style(user_input_style),
-          chunks[1], // Change here
+          chunks[1],
       );
   }).unwrap();
+}
+
+async fn run_tui(mut rx: mpsc::Receiver<Vec<ListItem<'static>>>, terminal_sender: mpsc::Sender<()>) {
+  let mut stdout = io::stdout().into_alternate_screen().unwrap();
+  let backend = TermionBackend::new(stdout);
+  let mut terminal = Terminal::new(backend).unwrap();
+  let stdin = io::stdin();
+  let mut keys = stdin.keys();
+  let user_input = Arc::new(Mutex::new(String::new()));
+  let shared_state = SharedState {
+    user_input: user_input.clone(),
+  };
+  let mut items = vec![];
+
+  loop {
+    render_ui(&mut terminal, &mut items, &shared_state).await;
 
       // Handle key presses
       if let Some(Ok(key)) = keys.next() {
@@ -287,9 +290,10 @@ async fn run_tui(mut rx: mpsc::Receiver<Vec<ListItem<'static>>>, signal_tx: mpsc
                   // Send signal to start generate_items
                   // let mut user_input = shared_state.user_input.lock().unwrap();
                   // user_input.push(' '); 
-                  if let Err(err) = signal_tx.send(()).await {
+                  if let Err(err) = terminal_sender.send(()).await {
                       eprintln!("Error sending signal to start generate_items: {:?}", err);
                   }
+                  
               },
               Key::Char(c) => {
                   // println!("CHAR {}", c);
