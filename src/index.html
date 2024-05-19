@@ -44,6 +44,8 @@
     <h2>Your Query</h2>
     <input type="text" id="userQuery" placeholder="Type your query here..." oninput="checkSpace()">
     <button onclick="submitQuery()">Submit</button>
+    <div id="errorMessage" style="color: red; display: none;">Invalid query</div>
+    <div id="successMessage" style="color: green; display: none;">Query executed successfully</div>
 
     <script>
         // Function to fetch AI response from the server
@@ -110,14 +112,43 @@
                 suggestedQueriesList.appendChild(listItem);
             });
 
-            hideLoader(); // Hide loading spinner
+            hideLoader();
         }
 
-        // Function to submit user's query
+        function toggleError() {
+          document.getElementById('successMessage').style.display = 'none'; 
+          document.getElementById('errorMessage').style.display = 'block'; 
+        }
+
+        function toggleSuccess() {
+          document.getElementById('successMessage').style.display = 'block'; 
+          document.getElementById('errorMessage').style.display = 'none';
+        }
+
         async function submitQuery() {
             var userQuery = document.getElementById('userQuery').value;
             if (userQuery.trim() !== '') {
-                populateSuggestedQueries(userQuery);
+                try {
+                    const response = await fetch('/submit_query', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ query: userQuery })
+                    });
+
+                    if (!response.ok) {
+                      toggleError();
+                      throw new Error(`Failed to submit query: ${response.statusText}`);
+                    } else {
+                      toggleSuccess();
+                    }
+
+                    // Handle response from server if needed
+                } catch (error) {
+                  toggleError();
+                  console.error('Error:', error);
+                }
             }
         }
 

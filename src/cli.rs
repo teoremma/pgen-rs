@@ -2,17 +2,14 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Commands>,
-
-    #[arg(short, long)]
-    pub interactive: bool,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Queries the pgen, outputting to stdout.
     ///

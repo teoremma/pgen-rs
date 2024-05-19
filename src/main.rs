@@ -2,32 +2,20 @@ mod cli;
 mod pfile;
 mod pgen;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use cli::{Cli, Commands};
 use pfile::Pfile;
 use pgen::Pgen;
-use crossterm::{
-  event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyModifiers},
-  execute,
-  terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-};
-use tui::{
-  backend::{TermionBackend, Backend},
-  widgets::{Widget, List, ListItem, ListState, Block, Borders},
-  layout::{Layout, Constraint, Direction},
-  Terminal,
-  Frame,
-  style::{Style, Modifier, Color},
-};
-use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen, screen::IntoAlternateScreen, event::Key, input::TermRead};
 use std::io::{self, Write, ErrorKind::Other};
 use std::error::Error as StdError;
-use tokio::{runtime::Runtime, sync::mpsc};
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use actix_files as fs;
 use actix_web::{web, App, HttpServer, HttpResponse, Responder};
+use std::path::PathBuf;
+use std::str::FromStr;
+use shellwords::split;
 
 fn test_pgen() {
     let test_pgens = vec![
@@ -131,63 +119,87 @@ async fn fetch_ai_response(req_body: web::Json<FetchAIRequest>) -> impl Responde
     }
 }
 
-fn main() {
-  // test_pgen();
-  
-    let cli = Cli::parse();
-  if cli.interactive {
-    
-      // Start Actix-web server to serve the HTML page and handle API requests
-      actix_web::rt::System::new().block_on(async {
-        let server = actix_web::HttpServer::new(|| {
-            actix_web::App::new()
-                .route("/", actix_web::web::get().to(index))
-                .service(actix_files::Files::new("/static", "static").show_files_listing())
-                .route("/fetch_ai_response", actix_web::web::post().to(fetch_ai_response))
-        })
-        .bind("127.0.0.1:8080")
-        .unwrap()
-        .run();
+#[derive(Debug, Deserialize, Serialize)]
+struct SubmitQueryRequest {
+    query: String, // Define the fields of the request as needed
+}
 
-        println!("Server running at http://127.0.0.1:8080");
+async fn submit_query(req_body: web::Json<SubmitQueryRequest>) -> impl Responder {
+  // Access the query from the request body
+  let user_query = req_body.query.clone();
+  println!("Received user query: {}", user_query);
 
-        // Wait for the server to finish running
-        let _ = server.await;
-    });
-  } else if let Some(command) = cli.command {
-    match command {
-        Commands::Query {
-            pfile_prefix,
-            query_fstring,
-            query,
-            query_samples,
-        } => {
-            let pfile = Pfile::from_prefix(pfile_prefix);
-            if query_samples {
-                let mut reader = pfile.psam_reader().unwrap();
-                pfile
-                    .query_metadata(&mut reader, query, query_fstring)
-                    .unwrap();
-            } else {
-                let mut reader = pfile.pvar_reader().unwrap();
-                pfile
-                    .query_metadata(&mut reader, query, query_fstring)
-                    .unwrap();
-            }
-        }
-        Commands::Filter {
-            pfile_prefix,
-            var_query,
-            sam_query,
-            out_file,
-        } => {
-            let pfile = Pfile::from_prefix(pfile_prefix);
-            let out_file =
-                out_file.unwrap_or_else(|| format!("{}.pgen-rs.vcf", pfile.pfile_prefix).into());
-            pfile.output_vcf(sam_query, var_query, out_file).unwrap();
+  // Split the user query using shell parsing rules
+  let user_query_parts = split(&user_query).unwrap();
+  println!("PARTS {:?}", user_query_parts);
+  let cli_result = Cli::try_parse_from(user_query_parts);
+
+  println!("RESULT {:?}", cli_result);
+  let cli = match cli_result {
+      Ok(cli) => cli,
+      Err(error) => {
+          return HttpResponse::BadRequest().body(format!("Error parsing user query: {}", error));
+      }
+  };
+
+  // Execute the corresponding command
+  match cli.command {
+    Some(Commands::Query {
+        pfile_prefix,
+        query_fstring,
+        query,
+        query_samples,
+    }) => {
+        let pfile = Pfile::from_prefix(pfile_prefix);
+        if query_samples {
+            let mut reader = pfile.psam_reader().unwrap();
+            pfile.query_metadata(&mut reader, query, query_fstring).unwrap();
+        } else {
+            let mut reader = pfile.pvar_reader().unwrap();
+            pfile.query_metadata(&mut reader, query, query_fstring).unwrap();
         }
     }
-  }
+    Some(Commands::Filter {
+        pfile_prefix,
+        var_query,
+        sam_query,
+        out_file,
+    }) => {
+        let pfile = Pfile::from_prefix(pfile_prefix);
+        let out_file =
+            out_file.unwrap_or_else(|| format!("{}.pgen-rs.vcf", pfile.pfile_prefix).into());
+        pfile.output_vcf(sam_query, var_query, out_file).unwrap();
+    }
+    None => {
+        return HttpResponse::BadRequest().body("Invalid user query: No command provided");
+    }
+  };
+
+  HttpResponse::Ok().finish() // Return a response indicating success
+}
+
+
+fn main() {
+  // test_pgen();
+      
+  // Start Actix-web server to serve the HTML page and handle API requests
+  actix_web::rt::System::new().block_on(async {
+    let server = actix_web::HttpServer::new(|| {
+        actix_web::App::new()
+            .route("/", actix_web::web::get().to(index))
+            .service(actix_files::Files::new("/static", "static").show_files_listing())
+            .route("/fetch_ai_response", actix_web::web::post().to(fetch_ai_response))
+            .route("/submit_query", actix_web::web::post().to(submit_query)) 
+    })
+    .bind("127.0.0.1:8080")
+    .unwrap()
+    .run();
+
+    println!("Server running at http://127.0.0.1:8080");
+
+    // Wait for the server to finish running
+    let _ = server.await;
+  });
 }
 
 #[derive(Serialize)]
