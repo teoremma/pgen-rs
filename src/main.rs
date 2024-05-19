@@ -26,6 +26,8 @@ use tokio::{runtime::Runtime, sync::mpsc};
 use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use actix_files as fs;
+use actix_web::{web, App, HttpServer, HttpResponse, Responder};
 
 fn test_pgen() {
     let test_pgens = vec![
@@ -110,28 +112,48 @@ fn test_pgen() {
 //     pfile.output_vcf(sample_ids, variant_ids);
 // }
 
+async fn index() -> HttpResponse {
+  HttpResponse::Ok()
+      .content_type("text/html")
+      .body(include_str!("index.html"))
+}
+
+#[derive(Deserialize)]
+struct FetchAIRequest {
+    prompt: String,
+}
+
+async fn fetch_ai_response(req_body: web::Json<FetchAIRequest>) -> impl Responder {
+    // Call the fetch_response_from_ai function with the provided prompt and API key
+    match fetch_response_from_ai(&req_body.prompt, "FAKE_KEY").await {
+        Ok(response) => HttpResponse::Ok().body(response),
+        Err(err) => HttpResponse::InternalServerError().body(format!("Error: {:?}", err)),
+    }
+}
+
 fn main() {
   // test_pgen();
   
     let cli = Cli::parse();
   if cli.interactive {
-    let rt = Runtime::new().unwrap();
-        rt.block_on(async {
-          enable_raw_mode().expect("Failed to enable raw mode");
-          let (tx, rx) = mpsc::channel(100); // Changed to non-mutable rx
-          let (signal_tx, mut signal_rx) = mpsc::channel(1); // Channel for signaling to start generate_items
-          
-            tokio::spawn(async move {
-              run_tui(rx, signal_tx.clone()).await;
-            });
+    
+      // Start Actix-web server to serve the HTML page and handle API requests
+      actix_web::rt::System::new().block_on(async {
+        let server = actix_web::HttpServer::new(|| {
+            actix_web::App::new()
+                .route("/", actix_web::web::get().to(index))
+                .service(actix_files::Files::new("/static", "static").show_files_listing())
+                .route("/fetch_ai_response", actix_web::web::post().to(fetch_ai_response))
+        })
+        .bind("127.0.0.1:8080")
+        .unwrap()
+        .run();
 
-            // If a signal is received, start generate_items
-            while let Some(_) = signal_rx.recv().await {
-              println!("HERE");
-              let api_key = "FAKE_KEY".to_string();
-              generate_items(tx.clone(), api_key).await;
-            }
-        });
+        println!("Server running at http://127.0.0.1:8080");
+
+        // Wait for the server to finish running
+        let _ = server.await;
+    });
   } else if let Some(command) = cli.command {
     match command {
         Commands::Query {
@@ -212,117 +234,4 @@ async fn fetch_response_from_ai(prompt: &str, api_key: &str) -> Result<String, B
   }
 
   Err("No valid choices found in API response".into())
-}
-
-async fn generate_items(mut sender: mpsc::Sender<Vec<ListItem<'static>>>, api_key: String) {
-  let prompts = vec!["Please generate a query for genomic data using bcftools"];
-  let mut items = Vec::new();
-
-  for prompt in prompts {
-    match fetch_response_from_ai(prompt, &api_key).await {
-        Ok(response) => items.push(ListItem::new(response)),
-        Err(err) => {
-            eprintln!("Error fetching AI response: {:?}", err);
-            items.push(ListItem::new("Error fetching AI response"));
-        }
-    }
-  }
-
-  sender.send(items).await.unwrap();
-}
-
-#[derive(Clone)]
-struct SharedState {
-    user_input: Arc<Mutex<String>>,
-}
-
-async fn render_ui(terminal: &mut Terminal<impl Backend>, items: &mut Vec<ListItem<'static>>, shared_state: &SharedState) {
-  terminal.draw(|f| {
-      let chunks = Layout::default()
-          .direction(Direction::Vertical)
-          .margin(1)
-          .constraints([Constraint::Min(1), Constraint::Length(3)].as_ref())
-          .split(f.size());
-
-      // Render AI-generated queries
-      let list = List::new(items.clone())
-          .block(Block::default().borders(Borders::ALL))
-          .highlight_style(Style::default().add_modifier(Modifier::BOLD).bg(Color::Blue))
-          .highlight_symbol(">> ");
-
-      let mut list_state = tui::widgets::ListState::default();
-      f.render_stateful_widget(list, chunks[0], &mut list_state);
-
-      // Render user input
-      let user_input_style = Style::default().fg(Color::Yellow);
-      let user_input_text = shared_state.user_input.lock().unwrap();
-      f.render_widget(
-          tui::widgets::Paragraph::new(user_input_text.as_str()).style(user_input_style),
-          chunks[1],
-      );
-  }).unwrap();
-}
-
-async fn run_tui(mut rx: mpsc::Receiver<Vec<ListItem<'static>>>, terminal_sender: mpsc::Sender<()>) {
-  let mut stdout = io::stdout().into_alternate_screen().unwrap();
-  let backend = TermionBackend::new(stdout);
-  let mut terminal = Terminal::new(backend).unwrap();
-  let stdin = io::stdin();
-  let mut keys = stdin.keys();
-  let user_input = Arc::new(Mutex::new(String::new()));
-  let shared_state = SharedState {
-    user_input: user_input.clone(),
-  };
-  let mut items = vec![];
-
-  loop {
-    render_ui(&mut terminal, &mut items, &shared_state).await;
-
-      // Handle key presses
-      if let Some(Ok(key)) = keys.next() {
-          match key {
-              Key::Char('q') => {
-                  // println!("EXITING");
-                  break;
-              },
-              Key::Char(' ') => {
-                  // println!("SPACE");
-                  // Send signal to start generate_items
-                  // let mut user_input = shared_state.user_input.lock().unwrap();
-                  // user_input.push(' '); 
-                  if let Err(err) = terminal_sender.send(()).await {
-                      eprintln!("Error sending signal to start generate_items: {:?}", err);
-                  }
-                  
-              },
-              Key::Char(c) => {
-                  // println!("CHAR {}", c);
-                  let mut user_input = shared_state.user_input.lock().unwrap();
-                  user_input.push(c);
-              }
-              Key::Backspace => {
-                  // println!("BACK");
-                  let mut user_input = shared_state.user_input.lock().unwrap();
-                  user_input.pop();
-              }
-              _ => {
-                  // println!("Unrecognized key: {:?}", key);
-              }
-          }
-      }
-
-      // Check for new items from the channel
-      match rx.try_recv() {
-          Ok(new_items) => {
-              // If receiving succeeds, update the items
-              items = new_items;
-          }
-          Err(_) => {
-              // If an error occurs or there are no new items, continue
-          }
-      }
-  }
-
-  // Disable raw mode
-  disable_raw_mode().expect("Failed to disable raw mode");
 }

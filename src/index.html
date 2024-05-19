@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Query Suggestions</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            margin-bottom: 10px;
+        }
+        #suggestedQueries {
+            margin-bottom: 20px;
+        }
+        #userQuery {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+        }
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Suggested Queries</h1>
+    <div id="loader" class="loader" style="display: none;"></div> <!-- Loading spinner -->
+    <ul id="suggestedQueries">
+        <!-- AI-generated suggested queries will be populated here dynamically -->
+    </ul>
+    <h2>Your Query</h2>
+    <input type="text" id="userQuery" placeholder="Type your query here..." oninput="checkSpace()">
+    <button onclick="submitQuery()">Submit</button>
+
+    <script>
+        // Function to fetch AI response from the server
+        async function fetchResponseFromAI(prompt) {
+            try {
+                const response = await fetch('/fetch_ai_response', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch AI response: ${response.statusText}`);
+                }
+
+                return await response.text();
+            } catch (error) {
+                console.error('Error fetching AI response:', error);
+                return 'Error fetching AI response';
+            }
+        }
+
+        // Function to check if the last character entered is a space
+        function checkSpace() {
+            var userQuery = document.getElementById('userQuery').value;
+            var lastChar = userQuery.slice(-1);
+            if (lastChar === ' ') {
+                populateSuggestedQueries(userQuery);
+            }
+        }
+
+        // Function to show loading spinner
+        function showLoader() {
+            document.getElementById('loader').style.display = 'block';
+        }
+
+        // Function to hide loading spinner
+        function hideLoader() {
+            document.getElementById('loader').style.display = 'none';
+        }
+
+        // Function to populate suggested queries list with AI-generated responses
+        async function populateSuggestedQueries(userQuery) {
+            showLoader(); // Show loading spinner
+            const prompt = "Please generate a query for genomic data using bcftools";
+            const suggestedQueriesList = document.getElementById('suggestedQueries');
+
+            // Clear existing list
+            suggestedQueriesList.innerHTML = '';
+
+            // Generate 3 different AI suggestions
+            const suggestions = new Set(); // Use a Set to ensure uniqueness
+            while (suggestions.size < 3) {
+                const response = await fetchResponseFromAI(prompt + ' ' + userQuery);
+                suggestions.add(response);
+            }
+
+            // Add suggestions to the list
+            suggestions.forEach(suggestion => {
+                const listItem = document.createElement('li');
+                listItem.textContent = suggestion;
+                suggestedQueriesList.appendChild(listItem);
+            });
+
+            hideLoader(); // Hide loading spinner
+        }
+
+        // Function to submit user's query
+        async function submitQuery() {
+            var userQuery = document.getElementById('userQuery').value;
+            if (userQuery.trim() !== '') {
+                populateSuggestedQueries(userQuery);
+            }
+        }
+
+        // Populate suggested queries list when the page loads
+        populateSuggestedQueries('');
+    </script>
+</body>
+</html>
