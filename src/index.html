@@ -91,16 +91,29 @@
 
         // Function to populate suggested queries list with AI-generated responses
         async function populateSuggestedQueries(userQuery) {
-            showLoader(); // Show loading spinner
-            const prompt = "Please generate a query for genomic data using bcftools";
+            showLoader();
+            // TODO: make this not hard-coded (see TODO below)
+            const prompt = "Please generate a query for genomic data using bcftools"; 
             const suggestedQueriesList = document.getElementById('suggestedQueries');
-
-            // Clear existing list
             suggestedQueriesList.innerHTML = '';
 
             // Generate 3 different AI suggestions
             const suggestions = new Set(); // Use a Set to ensure uniqueness
             while (suggestions.size < 3) {
+                /**
+                TODO: fix the prompt such that:
+                1) the userQuery is properly integrated into the prompt (i.e. the AI suggested 
+                   query should be userQuery + AI suggested content)
+                   userQuery is the partially typed query that you've typed so far
+                2) add the "grammmar" or whatever rules we have for the query DSL so that the AI
+                   generates query suggestions that are valid in our DSL
+                3) the userQuery should be natural language describing what we want the AI generated
+                   query to do, and the AI generated query will be correct based on the grammar
+                4) and the prompt should also include the text (or as much as the AI gen can handle)
+                   of the text of data related to the pgen file (we can decide where/how much text we 
+                   pass in) so the AI can generate appropriate queries
+                5) do some preprocessing on the pgen data to suggest better values?
+                */
                 const response = await fetchResponseFromAI(prompt + ' ' + userQuery);
                 suggestions.add(response);
             }
