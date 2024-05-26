@@ -1,0 +1,24 @@
+WHITESPACE = _{ " " | "\t" }
+
+CHROM = @{(ASCII_ALPHANUMERIC)+}
+
+POS = @{(ASCII_DIGIT)+}
+
+ID = @{(ASCII_ALPHANUMERIC)+ ~ ((";" ~ (ASCII_ALPHANUMERIC)+)+)?}
+
+allele = {("A" | "C" | "G" | "T" | "N" | "a" | "c" | "g" | "t" | "n")+}
+
+REF = @{allele}
+
+ALT = @{(allele ~ (("," ~ allele)+)?) | "."}
+
+QUAL = @{(ASCII_DIGIT)+ ~ ("." ~ (ASCII_DIGIT)+)?}
+
+FILTER = @{"PASS" | ((ASCII_ALPHANUMERIC)+ ~ ((";" ~ (ASCII_ALPHANUMERIC)+)+)?)}
+
+key_val_pair = @{(ASCII_ALPHANUMERIC)+ ~ "=" ~ ((ASCII_ALPHANUMERIC)+ ~ (("," ~ (ASCII_ALPHANUMERIC)+)+)?)}
+key_only =  @{(ASCII_ALPHANUMERIC)+}
+
+INFO = @{(key_val_pair | key_only )+ ~ ((";" ~ (key_val_pair | key_only))+)?}
+
+line = {CHROM ~ POS ~ ID ~ REF ~ ALT ~ QUAL ~ FILTER ~ INFO}

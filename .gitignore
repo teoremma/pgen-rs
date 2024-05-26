@@ -2,3 +2,4 @@
 *.vcf
 *.vcf.gz
 
+.errorviz-version
