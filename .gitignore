@@ -1,4 +1,4 @@
 /target
 *.vcf
 *.vcf.gz
-
+.env
