@@ -8,14 +8,6 @@ use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
-// use polars_core::prelude::*;
-// use polars_io::prelude::*;
-
-// use polars::prelude::*;
-// use polars::prelude::{CsvReader, DataFrame, SerReader};
-// use polars_io::RowIndex;
-// use polars::prelude::DataFrame;
-
 pub struct Pfile {
     pub pfile_prefix: String,
     pub num_variants: u32,
@@ -93,7 +85,7 @@ impl Pfile {
             let query_res = query.as_ref().map_or(true, |query| {
                 eval_boolean_with_context(query, &context).unwrap()
             });
-            
+
             if query_res {
                 let output = eval_string_with_context(&f_string, &context).unwrap();
                 println!("{}", output);
@@ -123,8 +115,7 @@ impl Pfile {
                     None
                 }
             })
-            .unwrap_or_else(|| panic!("IID not among the headers of {}",
-                self.psam_path()));
+            .unwrap_or_else(|| panic!("IID not among the headers of {}", self.psam_path()));
         let var_idx_rcds = self.filter_metadata(&mut self.pvar_reader()?, var_query)?;
         let sam_idx_rcs = self.filter_metadata(&mut psam_reader, sam_query)?;
         // println!("filtered metadata");
@@ -196,7 +187,7 @@ impl Pfile {
 
     fn variant_record_size(&self) -> u32 {
         let bit_size = self.num_samples * 2;
-        
+
         (bit_size / 8) + if bit_size % 8 == 0 { 0 } else { 1 }
     }
 
@@ -249,6 +240,7 @@ impl Pfile {
     fn find_metadata_file_header_start(meta_file: String) -> io::Result<u64> {
         let meta_file = File::open(meta_file)?;
         let mut meta_raw_reader = BufReader::new(meta_file);
+        #[allow(unused_assignments)]
         let mut prev_buf = String::new();
         let mut buf = String::new();
         loop {
@@ -287,7 +279,7 @@ impl Pfile {
         Pfile::metadata_file_reader(self.pvar_path(), self.num_variants as usize)
     }
 
-    pub fn filter_test(&self) -> io::Result<()> {
+    fn _filter_test(&self) -> io::Result<()> {
         let mut reader = self.pvar_reader()?;
         let headers: StringRecord = reader.headers()?.clone();
         let mut count = 0;
