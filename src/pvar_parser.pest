@@ -16,9 +16,16 @@ QUAL = @{(ASCII_DIGIT)+ ~ ("." ~ (ASCII_DIGIT)+)?}
 
 FILTER = @{"PASS" | ((ASCII_ALPHANUMERIC)+ ~ ((";" ~ (ASCII_ALPHANUMERIC)+)+)?)}
 
-key_val_pair = @{(ASCII_ALPHANUMERIC)+ ~ "=" ~ ((ASCII_ALPHANUMERIC)+ ~ (("," ~ (ASCII_ALPHANUMERIC)+)+)?)}
-key_only =  @{(ASCII_ALPHANUMERIC)+}
+alphanum_decimal_pipe = @{ASCII_ALPHANUMERIC | "." | "|"}
+alphanumunderscore = @{ASCII_ALPHANUMERIC | "_"}
+
+key_val_pair = @{(alphanumunderscore)+ ~ "=" ~ ((alphanum_decimal_pipe)+ ~ (("," ~ (alphanum_decimal_pipe)+)+)?)}
+key_only =  @{(alphanumunderscore)+}
 
 INFO = @{(key_val_pair | key_only )+ ~ ((";" ~ (key_val_pair | key_only))+)?}
 
 line = {CHROM ~ POS ~ ID ~ REF ~ ALT ~ QUAL ~ FILTER ~ INFO}
+
+idname = @{(ASCII_ALPHANUMERIC | "_")+}
+
+infoheader = @{"##INFO=<ID=" ~ idname}
