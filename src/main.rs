@@ -187,7 +187,6 @@ fn main() {
     let server = actix_web::HttpServer::new(|| {
         actix_web::App::new()
             .route("/", actix_web::web::get().to(index))
-            .service(actix_files::Files::new("/static", "static").show_files_listing())
             .route("/fetch_ai_response", actix_web::web::post().to(fetch_ai_response))
             .route("/submit_query", actix_web::web::post().to(submit_query)) 
     })
