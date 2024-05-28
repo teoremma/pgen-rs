@@ -8,6 +8,8 @@ use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
 
+use crate::QueryType;
+
 pub struct Pfile {
     pub pfile_prefix: String,
     pub num_variants: u32,
@@ -325,5 +327,106 @@ impl Pfile {
             }
         }
         Ok(kept_idx_vars)
+    }
+
+    /// Returns the columns and first row for the given metadata type.
+    ///
+    /// E.g. for .psam (with spaces intead of tabs):
+    ///
+    /// IID SEX
+    /// id1 N/A
+    pub fn metadata_columns_and_first_row(&self, query_type: &QueryType) -> io::Result<String> {
+        let mut meta_reader = match query_type {
+            QueryType::Sample => self.psam_reader(),
+            QueryType::Variant => self.pvar_reader(),
+        }?;
+        let columns = meta_reader
+            .headers()?
+            .iter()
+            .collect::<Vec<&str>>()
+            .join("\t");
+        let first_row = meta_reader
+            .records()
+            .next()
+            .unwrap()?
+            .iter()
+            .collect::<Vec<&str>>()
+            .join("\t");
+        Ok(columns + "\n" + &first_row)
+    }
+
+    pub fn create_ai_query(&self, query_type: &QueryType, prompt: &str) -> io::Result<String> {
+        match query_type {
+            QueryType::Sample => {
+                Ok(format!(r#"
+I've developed a tool for filtering genomic data by sample and I would like you to help me write a query for it.
+
+Queries are expressions that return a boolean value in a simple expression language. This language supports operations common to many programming languages, such as `==` for equality comparison, `""` for constructing string literals, and  `||` for boolean OR.
+
+To make these queries not behave statically, the tool instantiates special variables with values from the data itself. All of the variables are of type string, even those which represent numeric data.
+
+When filtering, the tool creates variables which correspond to the metadata fields in the sample, such as its identifier `IID`.
+
+Below is a list of all variables as well as sample values for each. The first line corresponds to the variables. The second line is a sample value for each.
+
+```
+{}
+```
+
+Below are two sample queries:
+
+Keep all of the samples with `SEX` not equal to `N/A`.
+
+```
+SEX != "N/A"
+```
+
+Keep all of the samples with ID `samp1`.
+
+```
+IID == "samp1"
+```
+
+I would like you to write me a query with the following specification: {}.
+
+Please return a response with one query per line. If you are confident in it, only include one query; otherwise, include as many queries you think represent different interpretations or implementations of the original request. Do not include any additional explanation or formatting. Your response will be parsed and then executed to filter the data.
+"#, self.metadata_columns_and_first_row(query_type)?, prompt).to_string())
+            }
+            QueryType::Variant => {
+                Ok(format!(r#"
+I've developed a tool for filtering genomic data by variant and I would like you to help me write a query for it.
+
+Queries are expressions that return a boolean value in a simple expression language. This language supports operations common to many programming languages, such as `==` for equality comparison, `""` for constructing string literals, and  `||` for boolean OR.
+
+To make these queries not behave statically, the tool instantiates special variables with values from the data itself. All of the variables are of type string, even those which represent numeric data.
+
+When filtering, the tool creates variables which correspond to the standard values seen in a .vcf file. For example, `ALT` references to the alternate allele for the current variant. There may be other variables too.
+
+Below is a list of all variables as well as sample values for each. The first line corresponds to the variables. The second line is a sample value for each.
+
+```
+{}
+```
+
+Below are two sample queries:
+
+Keep all of the variants with `POS` equal to `10` or `20`.
+
+```
+POS=="10" || POS=="20"
+```
+
+Keep all of the variants with `G` as the alternate allele and whose `POS` isn't `10`.
+
+```
+ALT=="G" && POS !="10"
+```
+
+I would like you to write me a query with the following specification: {}.
+
+Please return a response with one query per line. If you are confident in it, only include one query; otherwise, include as many queries you think represent different interpretations or implementations of the original request. Do not include any additional explanation or formatting. Your response will be parsed and then executed to filter the data.
+"#, self.metadata_columns_and_first_row(query_type)?, prompt).to_string())
+            }
+        }
     }
 }
