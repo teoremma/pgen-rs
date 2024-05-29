@@ -1,0 +1,23 @@
+WHITESPACE = _{ " " | "\t" }
+
+alphanumunderscore    = @{ ASCII_ALPHANUMERIC | "_" }
+key_only              = @{ (alphanumunderscore)+ }
+alphanum_decimal_pipe = @{ ASCII_ALPHANUMERIC | "." | "|" }
+valid_entries         = @{ alphanum_decimal_pipe | "_" | "'" | "\"" }
+
+valid_entry = @{valid_entries+}
+
+boolop = @{ "and" | "&" | "or" | "||" }
+
+INFOQ = { "INFO" ~ ("[" ~ key_only ~ (("," ~ (WHITESPACE)? ~ key_only)*)? ~ (WHITESPACE)? ~ "]") }
+
+column_name = { "CHROM" | "POS" | "ID" | "REF" | "ALT" | "QUAL" | "FILTER" | "INFO" }
+
+eq = @{"=="}
+neq = @{"!="}
+
+eqneq = {eq | neq}
+
+filterentry = { ((INFOQ | column_name) ~ eqneq ~ (WHITESPACE)? ~ valid_entry) }
+
+filterline = { (filterentry)? ~ (((boolop) ~ (filterentry))*)? }

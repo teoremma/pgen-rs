@@ -1,6 +1,8 @@
 mod cli;
 mod pfile;
 mod pgen;
+mod pvar_parser;
+mod filter_parser;
 
 use clap::{Parser, Subcommand};
 use cli::{Cli, Commands};

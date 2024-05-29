@@ -6,7 +6,11 @@ use evalexpr::{
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::iter::Filter;
 use std::path::PathBuf;
+
+use crate::pvar_parser::PvarParser;
+use crate::filter_parser::FilterParser;
 
 // use polars_core::prelude::*;
 // use polars_io::prelude::*;
@@ -75,6 +79,30 @@ impl Pfile {
         }
     }
 
+
+    fn parse_info_query(&self, query: String) -> Option<(Vec<String>, Vec<String>)> {
+        let info = FilterParser::get_info_query(&query);
+        match info {
+            Some(info_vals) => {
+                let info_keys = info_vals.first();
+                let info_filtervals = info_vals.last();
+                match (info_keys, info_filtervals) {
+                    (Some(info_keys), Some(info_filtervals)) => {
+                        if let Some(valid_info_keys) = PvarParser::get_meta_idnames(&self.pvar_path()).ok() {
+                            if info_keys.iter().all(|item| valid_info_keys.contains(item)) {
+                                return Some((info_keys.to_vec(), info_filtervals.to_vec()));
+                            }
+                        }
+
+                    },
+                    _ => (),
+                };
+            },
+            None => (),
+        };
+        None
+    }
+
     pub fn query_metadata(
         &self,
         reader: &mut Reader<File>,
@@ -82,17 +110,35 @@ impl Pfile {
         f_string: String,
     ) -> csv::Result<()> {
         let headers: StringRecord = reader.headers()?.clone();
+
+        // if query.is_some() {
+        //     if let Some((info_keys, info_filtervals)) = Self::parse_info_query(&self, query.clone().unwrap()) {
+
+        //     } else {
+        //         println!("invalid query: these fields don't exist in the INFO column");
+        //     }
+        // }
+
         for (_idx, rcd) in reader.records().enumerate() {
             let rcd = rcd?;
             let mut context = HashMapContext::new();
             for (var, val) in std::iter::zip(&headers, &rcd) {
-                context
-                    .set_value(var.to_string(), Value::String(val.to_string()))
-                    .unwrap();
+                // add the individual values from the INFO column to the context
+                if var == "INFO" {
+                    let kvpairs = PvarParser::get_info_kv_pairs(val);
+                    for (k, v) in kvpairs {
+                        context.set_value(format!("{}{}{}","INFO[",k ,"]"), Value::String(v)).unwrap();
+
+                    }
+                }
+                    context
+                        .set_value(var.to_string(), Value::String(val.to_string()))
+                        .unwrap();
             }
             let query_res = query.as_ref().map_or(true, |query| {
                 eval_boolean_with_context(query, &context).unwrap()
             });
+
             
             if query_res {
                 let output = eval_string_with_context(&f_string, &context).unwrap();
