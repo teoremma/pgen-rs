@@ -1,0 +1,92 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    width: 80%;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: white;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    margin-top: 20px;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.file-input {
+    margin-bottom: 20px;
+}
+
+.query-field {
+    margin-bottom: 20px;
+}
+
+label {
+    display: flex;
+    align-items: center;
+}
+
+input[type="text"] {
+    width: 70%;
+    padding: 8px;
+    margin-left: 10px;
+}
+
+input[type="file"] {
+    margin-left: 10px;
+}
+
+input[type="checkbox"] {
+    margin-right: 10px;
+}
+
+.suggestions {
+    display: flex;
+    align-items: center;
+}
+
+.suggestions input[type="text"] {
+    width: 50%;
+    border: 1px solid #ccc;   /* Light gray border */
+}
+
+.suggestions input:disabled {
+    background-color: #f0f0f0; /* Light gray background */
+    color: #a0a0a0;           /* Gray text */
+    border: 1px solid #ccc;   /* Light gray border */
+    cursor: not-allowed;      /* Change cursor to indicate it's not clickable */
+}
+
+button {
+    padding: 8px 12px;
+    margin-left: 10px;
+    cursor: pointer;
+}
+
+ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 10px 0 0 10px;
+}
+
+ul li {
+    cursor: pointer;
+    padding: 5px 0;
+}
+
+ul li:hover {
+    background-color: #eaeaea;
+}
+
+#resultMessage {
+    margin-top: 20px;
+    font-weight: bold;
+    text-align: center;
+}

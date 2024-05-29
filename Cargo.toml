@@ -21,6 +21,7 @@ actix-web = "4.6.0"
 shellwords = "1.1.0"
 pest = "2.6"
 pest_derive = "2.6"
+dotenv = "0.15.0"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]

@@ -3,3 +3,4 @@
 *.vcf.gz
 
 .errorviz-version
+.env

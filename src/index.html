@@ -3,170 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Query Suggestions</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        h1 {
-            margin-bottom: 10px;
-        }
-        #suggestedQueries {
-            margin-bottom: 20px;
-        }
-        #userQuery {
-            width: 100%;
-            padding: 10px;
-            font-size: 16px;
-        }
-        .loader {
-            border: 4px solid #f3f3f3; /* Light grey */
-            border-top: 4px solid #3498db; /* Blue */
-            border-radius: 50%;
-            width: 30px;
-            height: 30px;
-            animation: spin 2s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
+    <title>Interactive PGEN Query</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h1>Suggested Queries</h1>
-    <div id="loader" class="loader" style="display: none;"></div> <!-- Loading spinner -->
-    <ul id="suggestedQueries">
-        <!-- AI-generated suggested queries will be populated here dynamically -->
-    </ul>
-    <h2>Your Query</h2>
-    <input type="text" id="userQuery" placeholder="Type your query here..." oninput="checkSpace()">
-    <button onclick="submitQuery()">Submit</button>
-    <div id="errorMessage" style="color: red; display: none;">Invalid query</div>
-    <div id="successMessage" style="color: green; display: none;">Query executed successfully</div>
-
-    <script>
-        // Function to fetch AI response from the server
-        async function fetchResponseFromAI(prompt) {
-            try {
-                const response = await fetch('/fetch_ai_response', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ prompt: prompt })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch AI response: ${response.statusText}`);
-                }
-
-                return await response.text();
-            } catch (error) {
-                console.error('Error fetching AI response:', error);
-                return 'Error fetching AI response';
-            }
-        }
-
-        // Function to check if the last character entered is a space
-        function checkSpace() {
-            var userQuery = document.getElementById('userQuery').value;
-            var lastChar = userQuery.slice(-1);
-            if (lastChar === ' ') {
-                populateSuggestedQueries(userQuery);
-            }
-        }
-
-        // Function to show loading spinner
-        function showLoader() {
-            document.getElementById('loader').style.display = 'block';
-        }
-
-        // Function to hide loading spinner
-        function hideLoader() {
-            document.getElementById('loader').style.display = 'none';
-        }
-
-        // Function to populate suggested queries list with AI-generated responses
-        async function populateSuggestedQueries(userQuery) {
-            showLoader();
-            // TODO: make this not hard-coded (see TODO below)
-            const prompt = "Please generate a query for genomic data using bcftools"; 
-            const suggestedQueriesList = document.getElementById('suggestedQueries');
-            suggestedQueriesList.innerHTML = '';
-
-            // Generate 3 different AI suggestions
-            const suggestions = new Set(); // Use a Set to ensure uniqueness
-            while (suggestions.size < 3) {
-                /**
-                TODO: fix the prompt such that:
-                1) the userQuery is properly integrated into the prompt (i.e. the AI suggested 
-                   query should be userQuery + AI suggested content)
-                   userQuery is the partially typed query that you've typed so far
-                2) add the "grammmar" or whatever rules we have for the query DSL so that the AI
-                   generates query suggestions that are valid in our DSL
-                3) the userQuery should be natural language describing what we want the AI generated
-                   query to do, and the AI generated query will be correct based on the grammar
-                4) and the prompt should also include the text (or as much as the AI gen can handle)
-                   of the text of data related to the pgen file (we can decide where/how much text we 
-                   pass in) so the AI can generate appropriate queries
-                5) do some preprocessing on the pgen data to suggest better values?
-                */
-                const response = await fetchResponseFromAI(prompt + ' ' + userQuery);
-                suggestions.add(response);
-            }
-
-            // Add suggestions to the list
-            suggestions.forEach(suggestion => {
-                const listItem = document.createElement('li');
-                listItem.textContent = suggestion;
-                suggestedQueriesList.appendChild(listItem);
-            });
-
-            hideLoader();
-        }
-
-        function toggleError() {
-          document.getElementById('successMessage').style.display = 'none'; 
-          document.getElementById('errorMessage').style.display = 'block'; 
-        }
-
-        function toggleSuccess() {
-          document.getElementById('successMessage').style.display = 'block'; 
-          document.getElementById('errorMessage').style.display = 'none';
-        }
-
-        async function submitQuery() {
-            var userQuery = document.getElementById('userQuery').value;
-            if (userQuery.trim() !== '') {
-                try {
-                    const response = await fetch('/submit_query', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ query: userQuery })
-                    });
-
-                    if (!response.ok) {
-                      toggleError();
-                      throw new Error(`Failed to submit query: ${response.statusText}`);
-                    } else {
-                      toggleSuccess();
-                    }
-
-                    // Handle response from server if needed
-                } catch (error) {
-                  toggleError();
-                  console.error('Error:', error);
-                }
-            }
-        }
-
-        // Populate suggested queries list when the page loads
-        populateSuggestedQueries('');
-    </script>
+    <div class="container">
+        <h1>Query a PGEN file</h1>
+        <div class="file-input">
+            <label for="file">Path to pgen file triple (do not include the extension): </label>
+            <input type="text" id="file" name="file" value="data/basic1/basic1">
+        </div>
+        <div class="query-field">
+            <label>
+                <input type="checkbox" id="variantQueryCheckbox" checked>
+                Variant Query:
+            </label>
+            <div class="suggestions">
+                <input type="text" id="variantQuery" disabled>
+                <ul id="variantSuggestionsList"></ul>
+            </div>
+            <input type="text" id="variantSuggestionsInput" placeholder="Get suggestions">
+            <button id="variantAskButton">Ask</button>
+        </div>
+        <div class="query-field">
+            <label>
+                <input type="checkbox" id="sampleQueryCheckbox" checked>
+                Sample Query:
+            </label>
+            <div class="suggestions">
+                <input type="text" id="sampleQuery" disabled>
+                <ul id="sampleSuggestionsList"></ul>
+            </div>
+            <input type="text" id="sampleSuggestionsInput" placeholder="Get suggestions">
+            <button id="sampleAskButton">Ask</button>
+        </div>
+        <button id="submitButton">Submit</button>
+        <div id="resultMessage"></div>
+    </div>
+    <script src="scripts.js"></script>
 </body>
 </html>
