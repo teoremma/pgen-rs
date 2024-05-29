@@ -179,7 +179,6 @@ impl Pfile {
             .map(|(_idx, rcd)| rcd.get(sam_rcd_id_idx).unwrap().to_string())
             .collect::<Vec<String>>()
             .join("\t");
-
         let vcf = File::create(filename)?;
         let mut vcf_writer = BufWriter::new(vcf);
         // write the header
@@ -368,6 +367,12 @@ impl Pfile {
             let query_res = query.as_ref().map_or(true, |query| {
                 let mut context = HashMapContext::new();
                 for (var, val) in std::iter::zip(&headers, &rcd) {
+                    if var == "INFO" {
+                        let kvpairs = PvarParser::get_info_kv_pairs(val);
+                        for (k, v) in kvpairs {
+                            context.set_value(format!("{}{}{}","INFO[",k ,"]"), Value::String(v)).unwrap();
+                        }
+                    }
                     context
                         .set_value(var.to_string(), Value::String(val.to_string()))
                         .unwrap();
